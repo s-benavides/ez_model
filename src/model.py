@@ -12,7 +12,15 @@ def model(Nx,Ny,T,r,c,s,d,timed='No',save_gifs='No',folder='',skip='rand',skipma
     ####################
 
     # Define initial grid
-    B = np.random.randint(2, size=(Ny,Nx))
+    
+    # Height
+    z = np.zeros((Ny,Nx),dtype=int)
+    # Entrained or not
+    e = np.random.randint(2, size=(Ny,Nx),dtype=bool)
+    # Probabilities
+    p = np.zeros((Ny,Nx))
+    # Jump lengths
+    dx = np.zeros((Ny,Nx),dtype=int)
     
     #B[int(Ny/2),1]=1.0
 
