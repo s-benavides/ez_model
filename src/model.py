@@ -2,10 +2,11 @@
 model superclass
 """
 import numpy as np
+import random
 
 class model():
     
-    def __init__(self,Ny,Nx,delta_y,c_0,skipmax):
+    def __init__(self,Nx,Ny,delta_y,c_0,skipmax):
         ## Input parameters to be communicated to other functions:
         self.delta_y = delta_y
         self.skipmax = skipmax
@@ -39,12 +40,19 @@ class model():
         self.c_calc()
         # Recalculates dx randomly
         self.dx_calc()
-        # Resets self.p
-        self.p = np.zeros((Ny,Nx))
         
         ## Update probabilities:
-        for 
+        self.p_calc() 
         
+        ## Update entrainment 
+        self.e_update()
+        
+        ## Update height
+        self.z_update()
+        
+        # Resets entrainment matrix
+        self.e = np.copy(self.ep)
+        self.ep = np.zeros((self.Ny,self.Nx),dtype=bool)
         
     #####################
     # Calculation of dx #
@@ -73,3 +81,46 @@ class model():
         ### FINISH!!
           
         self.c = self.c_0*np.sqrt(s**2+1)
+        
+    ###########################
+    # Calculate probabilities #
+    ###########################
+    def p_calc(self):
+        # Reset the probabilities
+        self.p = np.zeros((self.Ny,self.Nx))
+        
+        for j in Ny:
+            for i in Nx:
+                if e[j,i]:
+                    self.p[j,i+self.dx[j,i]] = np.min((1,self.p[j,i+self.dx[j,i]]+self.c[i+self.dx[j,i]]))
+                    self.p[j+1,i+self.dx[j,i]] = np.min((1,self.p[j+1,i+self.dx[j,i]]+self.c[i+self.dx[j,i]]))
+                    self.p[j-1,i+self.dx[j,i]] = np.min((1,self.p[j-1,i+self.dx[j,i]]+self.c[i+self.dx[j,i]]))
+        # WHAT ABOUT BOUNDARIES?
+        
+        
+    ######################
+    # Update entrainment #
+    ######################
+    def e_update(self):
+        # Start an all-false second array. This will be the updated one. Need to keep both old and new for z calculation.
+        self.ep = np.zeros((self.Ny,self.Nx),dtype=bool)
+        
+        for j in Ny:
+            for i in Nx:
+                rndc = random.uniform(0.0, 1.0)
+                if rndc < self.p[j,i]:
+                    self.ep[j,i]=True
+        
+        # WHAT ABOUT BOUNDARIES?
+        
+    #################
+    # Update height #
+    #################
+    def z_update(self):
+        # Calculate total change in entrainment:
+        dp = np.sum(self.ep)-np.sum(self.e)
+        
+        if dp<0:  #particle(s) detrained
+            
+        
+        # WHAT ABOUT BOUNDARIES?
