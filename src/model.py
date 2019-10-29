@@ -14,12 +14,20 @@ class model():
         self.Nx = Nx
         self.Ny = Ny
         
-        ## Initialize fields
-        # Height
+        ####################
+        ## INITIAL fields ##
+        ####################
+        ## Height. Start with z = 0 everywhere.
         self.z = np.zeros((Ny,Nx),dtype=int)
-        # Entrained or not
+        ## Entrained or not
+        # Start with none entrained
         self.e = np.zeros((Ny,Nx),dtype=bool)
-        # Probabilities
+        # The auxiliary e:
+        self.ep = np.zeros((Ny,Nx),dtype=bool)
+        # We drop a random one at the beginning.
+        randj = random.randint(1,high = Ny)
+        self.e[randj-1,0] = True
+        ## Probabilities
         self.p = np.zeros((Ny,Nx))
         
         ## Initiates calculations:
@@ -36,29 +44,32 @@ class model():
     ####################
     
     def step(self):
-        # Calculates c, given self.z, self.c_0, and self.delta_y
-        self.c_calc()
-        # Recalculates dx randomly
-        self.dx_calc()
+        # Copies and auxiliary entrainment matrix
+        self.e = np.copy(self.ep)
         
-        ## Update probabilities:
-        self.p_calc() 
+        # We drop a random one at the head of flume.
+        randj = random.randint(1,high = self.Ny)
+        self.e[randj-1,0] = True
+        
+        # Calculates c, given self.z, self.c_0, and self.delta_y
+        self.c = self.c_calc()
+        # Recalculates dx randomly
+        self.dx = self.dx_calc()
+        
+        ## Calculates probabilities:
+        self.p = self.p_calc() 
         
         ## Update entrainment 
-        self.e_update()
+        self.ep = self.e_update()
         
         ## Update height
         self.z_update()
-        
-        # Resets entrainment matrix
-        self.e = np.copy(self.ep)
-        self.ep = np.zeros((self.Ny,self.Nx),dtype=bool)
         
     #####################
     # Calculation of dx #
     #####################
     def dx_calc(self):
-        self.dx = random.randint(1,high = skipmax,size=(Ny,Nx))
+        return random.randint(1,high = skipmax,size=(Ny,Nx))
         
         
     ###############################################
@@ -80,22 +91,25 @@ class model():
 #             s[-i]: = (z_avg[-i] - z_avg[-1])/(i)
         ### FINISH!!
           
-        self.c = self.c_0*np.sqrt(s**2+1)
+        return self.c_0*np.sqrt(s**2+1)
         
     ###########################
     # Calculate probabilities #
     ###########################
     def p_calc(self):
-        # Reset the probabilities
-        self.p = np.zeros((self.Ny,self.Nx))
+        # Set A (what will be the probability matrix) to zero:
+        A = np.zeros((self.Ny,self.Nx))
         
-        for j in Ny:
-            for i in Nx:
+        # Define probabilities of entrainment based on previous e and c matrix.
+        for j in range(self.Ny):
+            for i in range(self.Nx):
                 if e[j,i]:
-                    self.p[j,i+self.dx[j,i]] = np.min((1,self.p[j,i+self.dx[j,i]]+self.c[i+self.dx[j,i]]))
-                    self.p[j+1,i+self.dx[j,i]] = np.min((1,self.p[j+1,i+self.dx[j,i]]+self.c[i+self.dx[j,i]]))
-                    self.p[j-1,i+self.dx[j,i]] = np.min((1,self.p[j-1,i+self.dx[j,i]]+self.c[i+self.dx[j,i]]))
+                    A[j,i+self.dx[j,i]] = np.min((1,A[j,i+self.dx[j,i]]+self.c[i+self.dx[j,i]]))
+                    A[j+1,i+self.dx[j,i]] = np.min((1,A[j+1,i+self.dx[j,i]]+self.c[i+self.dx[j,i]]))
+                    A[j-1,i+self.dx[j,i]] = np.min((1,A[j-1,i+self.dx[j,i]]+self.c[i+self.dx[j,i]]))
         # WHAT ABOUT BOUNDARIES?
+        
+        return A
         
         
     ######################
@@ -103,15 +117,17 @@ class model():
     ######################
     def e_update(self):
         # Start an all-false second array. This will be the updated one. Need to keep both old and new for z calculation.
-        self.ep = np.zeros((self.Ny,self.Nx),dtype=bool)
+        A = np.zeros((self.Ny,self.Nx),dtype=bool)
         
-        for j in Ny:
-            for i in Nx:
+        for j in range(self.Ny):
+            for i in range(self.Nx):
                 rndc = random.uniform(0.0, 1.0)
                 if rndc < self.p[j,i]:
-                    self.ep[j,i]=True
+                    A[j,i]=True
         
         # WHAT ABOUT BOUNDARIES?
+        
+        return A
         
     #################
     # Update height #
