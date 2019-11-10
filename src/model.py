@@ -2,17 +2,26 @@
 model superclass
 """
 import numpy as np
-import random
 
 class model():
     
+    """
+    Initialize the model
+    Parameters
+    ----------
+    Nx: number of gridpoints in x-direction
+    Ny: number of gridpoints in y-direction
+    delta_y: distance (in # of grid points) over which to average for avg. local slope
+    c_0: collision coefficient at zero slope.
+    skipmax: dx skip max. Will draw randomly from 1 to skipmax for dx.
+    """
     def __init__(self,Nx,Ny,delta_y,c_0,skipmax):
-        ## Input parameters to be communicated to other functions:
-        self.delta_y = delta_y
-        self.skipmax = skipmax
-        self.c_0 = c_0        
-        self.Nx = Nx
-        self.Ny = Ny
+        ## Input parameters to be communicated to other functions:        
+        self.Nx = int(Nx)
+        self.Ny = int(Ny)
+        self.delta_y = int(delta_y)
+        self.c_0 = c_0
+        self.skipmax = int(skipmax)
         
         ####################
         ## INITIAL fields ##
@@ -25,30 +34,35 @@ class model():
         # The auxiliary e:
         self.ep = np.zeros((Ny,Nx),dtype=bool)
         # We drop a random one at the beginning.
-        randj = random.randint(1,high = Ny)
+        randj = np.random.randint(1,high = Ny)
         self.e[randj-1,0] = True
         ## Probabilities
         self.p = np.zeros((Ny,Nx))
         
         ## Initiates calculations:
         # Jump lengths
-        self.dx_calc()
+        self.dx = self.dx_calc()
         # Collision coefficient is computed
-        self.c_calc()
+        self.c = self.c_calc()
 
+    """
+    Get current state of model: returns [z,e,p,dx,c]
+    """
     def get_state(self):
         return [self.z,self.e,self.p,self.dx,self.c]
     
     ####################
     # Take a time step #
     ####################
-    
+    """
+    Take a time-step. Returns nothing, just updates [e,c,dx,p,ep,z]
+    """
     def step(self):
         # Copies and auxiliary entrainment matrix
         self.e = np.copy(self.ep)
         
         # We drop a random one at the head of flume.
-        randj = random.randint(1,high = self.Ny)
+        randj = np.random.randint(1,high = self.Ny)
         self.e[randj-1,0] = True
         
         # Calculates c, given self.z, self.c_0, and self.delta_y
@@ -63,13 +77,16 @@ class model():
         self.ep = self.e_update()
         
         ## Update height
-        self.z_update()
+        self.z = self.z_update()
         
     #####################
     # Calculation of dx #
     #####################
+    """
+    Calculates dx from randint(1,high=skipmax). Returns dx.
+    """
     def dx_calc(self):
-        return random.randint(1,high = skipmax,size=(Ny,Nx))
+        return np.random.randint(1,high = self.skipmax,size=(self.Ny,self.Nx))
         
         
     ###############################################
@@ -77,14 +94,16 @@ class model():
     ###############################################
     # delta_y = number of points you average over (integer)
     # c_0     = collision coefficient at zero slope.
-        
+    """
+    Calculates and returns c, given z, delta_y, and c_0.
+    """
     def c_calc(self):
         # First need to calculate avg local slope
         #Avg z along y-direction (0th component):
         z_avg = np.mean(self.z, axis=0, dtype=int)
 
         # Slope for bulk:
-        s = (z_avg - np.roll(z_avg,self.delta_y,axis=1))/self.delta_y    # Rolling over x, so axis 1.
+        s = (z_avg - np.roll(z_avg,self.delta_y))/self.delta_y    # Rolling over x, so axis 1.
 
         # Endpoints are messed up so we just average until the end here:
 #         for i in range(1,delta_y+1):
@@ -96,6 +115,9 @@ class model():
     ###########################
     # Calculate probabilities #
     ###########################
+    """
+    Calculates and returns probability matrix, given c and dx.
+    """
     def p_calc(self):
         # Set A (what will be the probability matrix) to zero:
         A = np.zeros((self.Ny,self.Nx))
@@ -115,13 +137,16 @@ class model():
     ######################
     # Update entrainment #
     ######################
+    """
+    Calculates and returns entrainment matrix e, given p, the probability matrix.
+    """
     def e_update(self):
         # Start an all-false second array. This will be the updated one. Need to keep both old and new for z calculation.
         A = np.zeros((self.Ny,self.Nx),dtype=bool)
         
         for j in range(self.Ny):
             for i in range(self.Nx):
-                rndc = random.uniform(0.0, 1.0)
+                rndc = np.random.uniform(0.0, 1.0)
                 if rndc < self.p[j,i]:
                     A[j,i]=True
         
@@ -132,11 +157,16 @@ class model():
     #################
     # Update height #
     #################
+    """
+    Calculates and returns z, given e (pre-time-step) and ep (post-time-step) entrainment matrices.
+    """
     def z_update(self):
         # Calculate total change in entrainment:
         dp = np.sum(self.ep)-np.sum(self.e)
         
         if dp<0:  #particle(s) detrained
-            
+            print('hey')
         
         # WHAT ABOUT BOUNDARIES?
+        
+        return z_temp
