@@ -12,15 +12,15 @@ class model():
     Nx: number of gridpoints in x-direction
     Ny: number of gridpoints in y-direction
     q_in: number of entrained particles at top of the bed (flux in). q_in <= Ny!
-    delta_y: distance (in # of grid points) over which to average for avg. local slope
+    x_avg: distance (in # of grid points) over which to average for avg. local slope
     c_0: collision coefficient at zero slope.
     skipmax: dx skip max. Will draw randomly from 1 to skipmax for dx.
     """
-    def __init__(self,Nx,Ny,q_in,delta_y,c_0,skipmax):
+    def __init__(self,Nx,Ny,q_in,x_avg,c_0,skipmax):
         ## Input parameters to be communicated to other functions:        
         self.Nx = int(Nx)
         self.Ny = int(Ny)
-        self.delta_y = int(delta_y)
+        self.x_avg = int(x_avg)
         self.c_0 = c_0
         self.skipmax = int(skipmax)
         if q_in>Ny:
@@ -66,7 +66,7 @@ class model():
     Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [c,dx,p,e,z,q_out].
     """
     def step(self):        
-        ## Calculates c, given z, c_0, and delta_y
+        ## Calculates c, given z, c_0, and x_avg
         self.c = self.c_calc() #FINISH !!!!!!!!!!!!!!!!!!!!
         
         ## Recalculates dx randomly
@@ -104,10 +104,10 @@ class model():
     ###############################################
     # Calculating collision likelyhood based on z.#
     ###############################################
-    # delta_y = number of points you average over (integer)
+    # x_avg = number of points you average over (integer)
     # c_0     = collision coefficient at zero slope.
     """
-    Calculates and returns c, given z, delta_y, and c_0.
+    Calculates and returns c, given z, x_avg, and c_0.
     """
     def c_calc(self):
         # First need to calculate avg local slope
@@ -115,10 +115,10 @@ class model():
         z_avg = np.mean(self.z, axis=0, dtype=int)
 
         # Slope for bulk:
-        s = (z_avg - np.roll(z_avg,self.delta_y))/self.delta_y    # Rolling over x, so axis 1.
+        s = (z_avg - np.roll(z_avg,self.x_avg))/self.x_avg    # Rolling over x, so axis 1.
 
         # Endpoints are messed up so we just average until the end here:
-#         for i in range(1,delta_y+1):
+#         for i in range(1,x_avg+1):
 #             s[-i]: = (z_avg[-i] - z_avg[-1])/(i)
         ### FINISH!!
           
