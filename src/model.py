@@ -63,7 +63,7 @@ class model():
     # Take a time step #
     ####################
     """
-    Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [e,c,dx,p,ep,z].
+    Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [c,dx,p,e,z,q_out].
     """
     def step(self):        
         ## Calculates c, given z, c_0, and delta_y
@@ -78,7 +78,7 @@ class model():
         ## Update new (auxiliary) entrainment matrix, given only p
         self.ep = self.e_update() #DONE
         
-        ## Update height based on auxiliary and past entrainment matrix
+        ## Update height, given e and ep.
         self.z = self.z_update() #FINISH !!!!!!!!!!!!!!!!!!!!!!!
         
         ## Calculates q_out based on e[:,-skipmax:]
