@@ -63,33 +63,33 @@ class model():
     # Take a time step #
     ####################
     """
-    Take a time-step. Returns nothing, just updates [e,c,dx,p,ep,z]
+    Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [e,c,dx,p,ep,z].
     """
-    def step(self):
-        ## We drop q_in number of grains (randomly) at the head of the flume.
-        inds = np.random.choice(self.Ny,self.q_in,replace=False)
-        self.e[inds,0] = True
-        
-        ## Calculates c, given self.z, self.c_0, and self.delta_y
-        self.c = self.c_calc()
+    def step(self):        
+        ## Calculates c, given z, c_0, and delta_y
+        self.c = self.c_calc() #FINISH !!!!!!!!!!!!!!!!!!!!
         
         ## Recalculates dx randomly
-        self.dx = self.dx_calc()
+        self.dx = self.dx_calc() #DONE
         
-        ## Calculates probabilities:
-        self.p = self.p_calc() 
+        ## Calculates probabilities, given c, e, and dx
+        self.p = self.p_calc() #DONE
         
         ## Update new (auxiliary) entrainment matrix, given only p
-        self.ep = self.e_update()
+        self.ep = self.e_update() #DONE
         
         ## Update height based on auxiliary and past entrainment matrix
-        self.z = self.z_update()
+        self.z = self.z_update() #FINISH !!!!!!!!!!!!!!!!!!!!!!!
         
         ## Calculates q_out based on e[:,-skipmax:]
-        self.q_out = self.q_out_calc()
+        self.q_out = self.q_out_calc() #DONE
         
         ## Copies and auxiliary entrainment matrix
         self.e = np.copy(self.ep)
+        
+        ## We drop q_in number of grains (randomly) at the head of the flume.
+        inds = np.random.choice(self.Ny,self.q_in,replace=False)
+        self.e[inds,0] = True
         
     #####################
     # Calculation of dx #
