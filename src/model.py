@@ -37,11 +37,11 @@ class model():
         ## Entrained or not
         # Start with none entrained
         self.e = np.zeros((Ny,Nx),dtype=bool)
-        # The auxiliary e:
-        self.ep = np.zeros((Ny,Nx),dtype=bool)
         # We drop q_in number of grains (randomly) at the beginning.
         inds = np.random.choice(Ny,q_in,replace=False)
         self.e[inds,0] = True
+        # The auxiliary e:
+        self.ep = np.zeros((Ny,Nx),dtype=bool)
         ## Probabilities
         self.p = np.zeros((Ny,Nx))
         ## Flux out:
@@ -118,7 +118,6 @@ class model():
         s = (z_avg - np.roll(z_avg,self.delta_y))/self.delta_y    # Rolling over x, so axis 1.
 
         # Endpoints are messed up so we just average until the end here:
-        # MAKE SURE TO PROPERLY DEAL WITH 'OUT' ZONE!
 #         for i in range(1,delta_y+1):
 #             s[-i]: = (z_avg[-i] - z_avg[-1])/(i)
         ### FINISH!!
