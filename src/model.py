@@ -2,6 +2,7 @@
 model superclass
 """
 import numpy as np
+import matplotlib.pyplot as plt
 
 class model():
     
@@ -21,6 +22,8 @@ class model():
         self.Nx = int(Nx)
         self.Ny = int(Ny)
         self.x_avg = int(x_avg)
+        if self.x_avg % 2 != 0:
+            print("x_avg NOT even! Want it to be an even number.")
         self.c_0 = c_0
         self.skipmax = int(skipmax)
         if q_in>Ny:
@@ -67,7 +70,7 @@ class model():
     """
     def step(self):        
         ## Calculates c, given z, c_0, and x_avg
-        self.c = self.c_calc() #FINISH !!!!!!!!!!!!!!!!!!!!
+        self.c = self.c_calc() #DONE
         
         ## Recalculates dx randomly
         self.dx = self.dx_calc() #DONE
@@ -79,7 +82,7 @@ class model():
         self.ep = self.e_update() #DONE
         
         ## Update height, given e and ep.
-        self.z = self.z_update() #FINISH !!!!!!!!!!!!!!!!!!!!!!!
+        self.z = self.z_update() #DONE
         
         ## Calculates q_out based on e[:,-skipmax:]
         self.q_out = self.q_out_calc() #DONE
@@ -113,16 +116,24 @@ class model():
         # First need to calculate avg local slope
         #Avg z along y-direction (0th component):
         z_avg = np.mean(self.z, axis=0, dtype=int)
-
-        # Slope for bulk:
-        s = (z_avg - np.roll(z_avg,self.x_avg))/self.x_avg    # Rolling over x, so axis 1.
+        
+        # Central diff slope for bulk:
+        s = (np.roll(z_avg,-int(self.x_avg/2)) - np.roll(z_avg,int(self.x_avg/2)))/np.float(self.x_avg) 
 
         # Endpoints are messed up so we just average until the end here:
-#         for i in range(1,x_avg+1):
-#             s[-i]: = (z_avg[-i] - z_avg[-1])/(i)
-        ### FINISH!!
-          
-        return self.c_0*np.sqrt(s**2+1)
+        for i in range(1,int(self.x_avg/2)):
+            s[i] = (z_avg[2*i] - z_avg[0])/(2*i)
+            s[-(i+1)] = (z_avg[-1] - z_avg[-(2*i+1)])/(2*i)
+                
+        # For the first and last points we set slope at half step:
+        s[0] = z_avg[1]-z_avg[0]
+        s[-1] = z_avg[-1]-z_avg[-2]
+        
+        # We want s to be NEGATIVE, so all positive s is set to zero!
+        c_temp = self.c_0*np.sqrt(s**2+1)
+        c_temp[s>0] = 0.0
+        
+        return c_temp
         
     ###########################
     # Calculate probabilities #
@@ -183,18 +194,60 @@ class model():
     Calculates and returns z, given e (pre-time-step) and ep (post-time-step) entrainment matrices.
     """
     def z_update(self):
-        # Calculate total change in entrainment (not counting 'out' region):
-        dp = np.sum(self.ep[:,:-self.skipmax])-np.sum(self.e[:,:-self.skipmax])
+        z_temp = np.copy(self.z)
+        
+        # Calculate total change in entrainment
+        dp = np.sum(self.ep)-np.sum(self.e)
         
         if dp<0:  #particle(s) detrained
-            print('hey')
-        
-        # MAKE SURE TO ONLY UPDATE ON 'IN' PART OF THE GRID!
-        # Set last skipmax columns to zero (only for q_out calc)
-        z_temp[:,-self.skipmax:] = int(0)
-        
-        # WHAT ABOUT BOUNDARIES?
-        
+            # Add particles where e is True
+            inds = np.argwhere(self.e)
+            inds_dep = np.random.choice(len(inds),abs(dp),replace=False)
+            for ind in inds[inds_dep]:
+                z_temp[tuple(ind)]+=1
+                
+        elif dp>0:  #particle(s) entrained
+            # Remove particles where ep is True
+            inds = np.argwhere(self.ep)
+            inds_dep = np.random.choice(len(inds),abs(dp),replace=False)
+            for ind in inds[inds_dep]:
+                z_temp[tuple(ind)]-=1
+                
         return z_temp
     
-    
+    #########
+    # PLOTS #
+    #########
+    """
+    Plots the physically relevant fields: z and e.
+    """
+    def plot_min(self):
+        fig,(ax1,ax2,ax3)=plt.subplots(3,1,figsize=(8,8))
+        ax1.imshow(self.e,vmin=0,vmax=1)
+        ax1.set_title("Entrainment Field")
+        ax1.axis("off")
+        #
+        im = ax2.imshow(self.z,vmin=0,vmax=np.max(self.z))
+        ax2.set_title("Height field")
+        fig.colorbar(im,ax=ax2,orientation='horizontal')
+        ax2.axis("off")
+        #
+        ax3.plot(np.mean(self.z,axis=0),'.k')
+        ax3.set_ylabel("Height")
+        ax3.set_xlabel(r"$x$")
+        plt.show()
+   
+    """
+    Plots all fields:
+    """
+    def plot_all(self):
+        out = self.get_state() #[z,e,p,dx,c,q_out]
+        names = ['z','e','p','dx','c','q_out']
+        for ii,field in enumerate(out[:-2]): # all of the fields
+            plt.imshow(field)
+            plt.title("%s" % names[ii])
+            plt.show()
+            
+        plt.plot(out[-2])
+        plt.title("c")
+        plt.show()
