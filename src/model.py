@@ -232,7 +232,10 @@ class model():
         fig.colorbar(im,ax=ax2,orientation='horizontal')
         ax2.axis("off")
         #
-        ax3.plot(np.mean(self.z,axis=0),'.k')
+        meanz = np.mean(self.z,axis=0)
+        ax3.plot(meanz,'.k')
+#         x = np.arange(len(meanz))
+#         ax3.plot(meanz[0]-np.sqrt(1/(9.*self.c_0)-1)*x,'--r')
         ax3.set_ylabel("Height")
         ax3.set_xlabel(r"$x$")
         plt.show()
