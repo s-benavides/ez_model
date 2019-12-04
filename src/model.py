@@ -3,21 +3,23 @@ model superclass
 """
 import numpy as np
 import matplotlib.pyplot as plt
+import pickle,tqdm
+from datetime import date
 
 class model():
     
-    """
-    Initialize the model
-    Parameters
-    ----------
-    Nx: number of gridpoints in x-direction
-    Ny: number of gridpoints in y-direction
-    q_in: number of entrained particles at top of the bed (flux in). q_in <= Ny!
-    x_avg: distance (in # of grid points) over which to average for avg. local slope
-    c_0: collision coefficient at zero slope.
-    skipmax: dx skip max. Will draw randomly from 1 to skipmax for dx.
-    """
     def __init__(self,Nx,Ny,q_in,x_avg,c_0,skipmax):
+        """
+        Initialize the model
+        Parameters
+        ----------
+        Nx: number of gridpoints in x-direction
+        Ny: number of gridpoints in y-direction
+        q_in: number of entrained particles at top of the bed (flux in). q_in <= Ny!
+        x_avg: distance (in # of grid points) over which to average for avg. local slope
+        c_0: collision coefficient at zero slope.
+        skipmax: dx skip max. Will draw randomly from 1 to skipmax for dx.
+        """
         ## Input parameters to be communicated to other functions:        
         self.Nx = int(Nx)
         self.Ny = int(Ny)
@@ -27,6 +29,7 @@ class model():
         self.c_0 = c_0
         self.skipmax = int(skipmax)
         if q_in>Ny:
+            print("q_in > Ny ! Setting q_in = Ny.")
             self.q_in = Ny
         else:
             self.q_in = q_in
@@ -56,19 +59,17 @@ class model():
         # Collision coefficient is computed
         self.c = self.c_calc()
 
-    """
-    Get current state of model: returns [z,e,p,dx,c,q_out]
-    """
-    def get_state(self):
-        return [self.z,self.e,self.p,self.dx,self.c,self.q_out]
-    
+#########################################
+####       Dynamics and Calcs      ######
+#########################################
+        
     ####################
     # Take a time step #
     ####################
-    """
-    Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [c,dx,p,e,z,q_out].
-    """
-    def step(self):        
+    def step(self):     
+        """
+        Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [c,dx,p,e,z,q_out].
+        """
         ## Calculates c, given z, c_0, and x_avg
         self.c = self.c_calc() #DONE
         
@@ -81,11 +82,11 @@ class model():
         ## Update new (auxiliary) entrainment matrix, given only p
         self.ep = self.e_update() #DONE
         
-        ## Update height, given e and ep.
-        self.z = self.z_update() #DONE
-        
         ## Calculates q_out based on e[:,-skipmax:]
         self.q_out = self.q_out_calc() #DONE
+        
+        ## Update height, given e and ep.
+        self.z = self.z_update() #DONE
         
         ## Copies and auxiliary entrainment matrix
         self.e = np.copy(self.ep)
@@ -97,22 +98,29 @@ class model():
     #####################
     # Calculation of dx #
     #####################
-    """
-    Calculates dx from randint(1,high=skipmax). Returns dx.
-    """
     def dx_calc(self):
-        return np.random.randint(1,high = self.skipmax+1,size=(self.Ny,self.Nx))
+        """
+        Calculates dx from randint(1,high=skipmax). Returns dx.
+        """            
+#         return np.random.randint(1,high = self.skipmax+1,size=(self.Ny,self.Nx))
+        s = self.s_calc()
+        skip_x = np.array(self.skipmax*np.sqrt(s**2+1),dtype=int)
+        skip_x[skip_x>self.Nx/10] = self.Nx/10
+        skip_x[s>0] = 0.0
+        dx = np.zeros((self.Ny,self.Nx),dtype=int)
+        for i in range(self.Nx):
+            dx[:,i]=np.random.randint(0,high=skip_x[i]+1,size=(self.Ny))
         
+        return dx
         
-    ###############################################
-    # Calculating collision likelyhood based on z.#
-    ###############################################
+    ################################
+    # Calculating slope based on z.#
+    ################################
     # x_avg = number of points you average over (integer)
-    # c_0     = collision coefficient at zero slope.
-    """
-    Calculates and returns c, given z, x_avg, and c_0.
-    """
-    def c_calc(self):
+    def s_calc(self):
+        """
+        Calculates local slope given z and x_avg.
+        """
         # First need to calculate avg local slope
         #Avg z along y-direction (0th component):
         z_avg = np.mean(self.z, axis=0, dtype=int)
@@ -124,10 +132,29 @@ class model():
         for i in range(1,int(self.x_avg/2)):
             s[i] = (z_avg[2*i] - z_avg[0])/(2*i)
             s[-(i+1)] = (z_avg[-1] - z_avg[-(2*i+1)])/(2*i)
-                
+
         # For the first and last points we set slope at half step:
         s[0] = z_avg[1]-z_avg[0]
         s[-1] = z_avg[-1]-z_avg[-2]
+
+#         # A different possibility
+#         # Look only at what's one ahead of you:
+#         s = np.roll(z_avg,-1) - z_avg
+
+#         # Endpoints are messed up so we just average until the end here:
+#         s[-1] = s[-2]   # set it to be slope of second to last point.
+            
+        return s
+        
+    ###############################################
+    # Calculating collision likelyhood based on z.#
+    ###############################################
+    # c_0     = collision coefficient at zero slope.
+    def c_calc(self):
+        """
+        Calculates and returns c, given local slope and c_0.
+        """
+        s = self.s_calc()
         
         # We want s to be NEGATIVE, so all positive s is set to zero!
         c_temp = self.c_0*np.sqrt(s**2+1)
@@ -138,10 +165,10 @@ class model():
     ###########################
     # Calculate probabilities #
     ###########################
-    """
-    Calculates and returns probability matrix, given c,e, and dx.
-    """
     def p_calc(self):
+        """
+        Calculates and returns probability matrix, given c,e, and dx.
+        """
         # Set A (what will be the probability matrix) to zero:
         p_temp = np.zeros((self.Ny,self.Nx))
         
@@ -158,10 +185,10 @@ class model():
     ###########################
     # Calculates q_out (flux) #
     ###########################
-    """
-    Calculates and returns q_out, the flux of grains leaving the domain.
-    """
     def q_out_calc(self):
+        """
+        Calculates and returns q_out, the flux of grains leaving the domain.
+        """
         q_out_temp = int(0)
         for y,x in np.argwhere(self.e):
             if self.dx[y,x] + x>self.Nx-1:
@@ -172,10 +199,10 @@ class model():
     ######################
     # Update entrainment #
     ######################
-    """
-    Calculates and returns entrainment matrix e, given p, the probability matrix.
-    """
     def e_update(self):
+        """
+        Calculates and returns entrainment matrix e, given p, the probability matrix.
+        """
         # Start an all-false second array. This will be the updated one. Need to keep both old and new for z calculation.
         A = np.zeros((self.Ny,self.Nx),dtype=bool)
         
@@ -190,21 +217,22 @@ class model():
     #################
     # Update height #
     #################
-    """
-    Calculates and returns z, given e (pre-time-step) and ep (post-time-step) entrainment matrices.
-    """
     def z_update(self):
+        """
+        Calculates and returns z, given e (pre-time-step) and ep (post-time-step) entrainment matrices.
+        """
         z_temp = np.copy(self.z)
         
         # Calculate total change in entrainment
-        dp = np.sum(self.ep)-np.sum(self.e)
+        dp = np.sum(self.ep)+self.q_out-np.sum(self.e) 
         
         if dp<0:  #particle(s) detrained
             # Add particles where e is True
             inds = np.argwhere(self.e)
             inds_dep = np.random.choice(len(inds),abs(dp),replace=False)
             for ind in inds[inds_dep]:
-                z_temp[tuple(ind)]+=1
+                if self.dx[ind[0],ind[1]] + ind[1]<=self.Nx-1:  # Not counting things that went outside
+                    z_temp[(ind[0],ind[1]+self.dx[tuple(ind)])]+=1
                 
         elif dp>0:  #particle(s) entrained
             # Remove particles where ep is True
@@ -213,15 +241,54 @@ class model():
             for ind in inds[inds_dep]:
                 z_temp[tuple(ind)]-=1
                 
+        # Sets any negative z to zero (although this should not happen...)
+        for i in np.where(self.z<0)[0][0:1]:
+            print("NEGATIVE Z!")
+        z_temp[z_temp<0] = 0
+        
         return z_temp
+
+#########################################
+####       Import/Export      ###########
+#########################################
+ 
+    def get_state(self):
+        """
+        Get current state of model: returns [z,e,p,dx,c,q_out,Nx,Ny,q_in,x_avg,c_0,skipmax]
+        """
+        return [self.z,self.e,self.p,self.dx,self.c,self.q_out,self.Nx,self.Ny,self.q_in,self.x_avg,self.c_0,self.skipmax]
     
-    #########
-    # PLOTS #
-    #########
-    """
-    Plots the physically relevant fields: z and e.
-    """
+    def set_state(self,data):
+        """
+        Set current state of model: input must be in format [z,e,p,dx,c,q_out,Nx,Ny,q_in,x_avg,c_0,skipmax]. To be used with 'load_data'. No need to use set_state unless you want to manually create a dataset.
+        """
+        [self.z,self.e,self.p,self.dx,self.c,self.q_out,self.Nx,self.Ny,self.q_in,self.x_avg,self.c_0,self.skipmax] = data
+        return
+    
+    def load_data(self,name):
+        """
+        Imports pickle file with given name and sets the state of the model. Note that you can also manually set the state by calling the 'set_state' fuction.
+        """
+        data = pickle.load( open(str(name), 'rb'))
+        self.set_state(data)
+        return 
+    
+    def export_data(self,odir):
+        """
+        Exports full data into directory 'odir', named with today's date.
+        """
+        c0str = str(self.c_0).replace(".", "d")
+        name = odir+ 'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+str(self.q_in)+'_xavg_'+str(self.x_avg)+'_c0_'+c0str+'_skip_'+str(self.skipmax)+'_'+str(date.today())+'.p'
+        pickle.dump(self.get_state(), open(str(name), 'wb'))
+        return
+    
+#########################################
+####       Plots and Moves      #########
+#########################################
     def plot_min(self):
+        """
+        Plots the physically relevant fields: z and e.
+        """
         fig,(ax1,ax2,ax3)=plt.subplots(3,1,figsize=(8,8))
         ax1.imshow(self.e,vmin=0,vmax=1)
         ax1.set_title("Entrainment Field")
@@ -239,18 +306,110 @@ class model():
         ax3.set_ylabel("Height")
         ax3.set_xlabel(r"$x$")
         plt.show()
+        return
    
-    """
-    Plots all fields:
-    """
     def plot_all(self):
+        """
+        Plots all fields:
+        """
         out = self.get_state() #[z,e,p,dx,c,q_out]
         names = ['z','e','p','dx','c','q_out']
-        for ii,field in enumerate(out[:-2]): # all of the fields
-            plt.imshow(field)
+        for ii,field in enumerate(out[:4]): # all of the fields
+            im=plt.imshow(field)
             plt.title("%s" % names[ii])
+            if names[ii] in ['z','p','dx']:
+                plt.colorbar(im)
             plt.show()
             
-        plt.plot(out[-2])
+        plt.plot(out[4])
         plt.title("c")
         plt.show()
+        return
+        
+    def make_movie(self, t_steps, duration, odir,fps=24,name_add=''):
+        """
+        Takes t_steps number of time-steps from *current* state and exports a movie in 'odir' directory that is 'duration' seconds long. You can also add to the end of the name with the command 'name_add=_(your name here)' (make sure to include the underscore).
+        """
+        # For saving
+#         import matplotlib
+#         matplotlib.use("Agg")
+        import matplotlib.animation as animation
+        from matplotlib.animation import FFMpegWriter
+
+        # Calculate how many steps to skip before each save
+        dt_frame = int((t_steps)/(fps*duration))
+        
+        ### Make the data:
+        zs = [np.mean(self.z,axis=0)]
+        es = [self.e]
+        qs = [self.q_out]
+        dt = 0
+        for frame in tqdm.tqdm(range(t_steps)):
+            self.step()
+            qs.append(self.q_out)  
+            dt+=1 
+            if dt % dt_frame ==0:
+                dt = 0
+                zs.append(np.mean(self.z,axis=0))
+                es.append(self.e)    
+                
+        zs=np.array(zs)
+        es=np.array(es)
+        qs=np.array(qs)
+
+        n_frames = len(zs)
+        
+        # create a figure with two subplots
+        fig,(ax1,ax2,ax3)=plt.subplots(3,1)#,figsize=(8,8))
+
+        # initialize two axes objects (one in each axes)
+        im_e = ax1.imshow(es[0],vmin=0,vmax=1)
+        im_z, = ax2.plot(zs[-1],'.k')      
+        im_q, = ax3.plot(np.zeros(len(qs)),'-k',lw=1)
+
+        # set titles and labels
+        ax1.set_title("Entrainment Field")
+        ax1.axis("off")
+        ax2.set_ylabel("Height")
+        ax2.set_xlabel(r"$x$")
+        ax2.set_ylim(0,np.max(zs[-1]))
+        ax3.set_ylabel(r"$q$")
+        ax3.set_xlabel(r"$t$")
+        ax3.set_ylim(0,np.max(qs))
+
+        ### Animate function
+        def animate(frame):
+            """
+            Animation function. Takes the current frame number (to select the potion of
+            data to plot) and a plot object to update.
+            """
+            q_temp = np.zeros(len(qs))
+            q_temp[:frame*dt_frame] = qs[:frame*dt_frame]
+
+            im_q.set_ydata(q_temp)
+            im_e.set_array(es[frame])
+            im_z.set_ydata(zs[frame])
+
+            return im_e,im_z,im_q
+
+        sim = animation.FuncAnimation(
+            # Your Matplotlib Figure object
+            fig,
+            # The function that does the updating of the Figure
+            animate,
+            # Frame information (here just frame number)
+            np.arange(n_frames),
+            # Extra arguments to the animate function
+            fargs=[],
+            # Frame-time in ms; i.e. for a given frame-rate x, 1000/x
+            interval=1000 / fps
+        )
+
+        # Try to set the DPI to the actual number of pixels you're plotting
+        writer = FFMpegWriter(fps=fps, metadata=dict(artist='Me'), bitrate=1800)
+        c0str = str(self.c_0).replace(".", "d")
+        name = odir+'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+str(self.q_in)+'_xavg_'+str(self.x_avg)+'_c0_'+c0str+'_skip_'+str(self.skipmax)+'_'+str(date.today())+name_add+'.mp4'
+        sim.save(name, dpi=300, writer=writer)
+
+        return
+        
