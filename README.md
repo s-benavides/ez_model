@@ -1,3 +1,3 @@
 # EZ Model
 ### Santiago Benavides
-Lattice model for bedload sediment transport in gravel-bedded rivers.
+A collision-based lattice model for bedload sediment transport in gravel-bedded rivers.
