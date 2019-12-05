@@ -3,3 +3,4 @@ src/__pycache__/
 .ipynb_checkpoints/
 examples/*.mp4
 examples/*.p
+local_tests/
