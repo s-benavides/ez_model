@@ -2,7 +2,6 @@
 model superclass
 """
 import numpy as np
-import matplotlib.pyplot as plt
 import pickle,tqdm
 from datetime import date
 
@@ -289,6 +288,7 @@ class model():
         """
         Plots the physically relevant fields: z and e.
         """
+        import matplotlib.pyplot as plt
         fig,(ax1,ax2,ax3)=plt.subplots(3,1,figsize=(8,8))
         ax1.imshow(self.e,vmin=0,vmax=1)
         ax1.set_title("Entrainment Field")
@@ -312,6 +312,7 @@ class model():
         """
         Plots all fields:
         """
+        import matplotlib.pyplot as plt
         out = self.get_state() #[z,e,p,dx,c,q_out]
         names = ['z','e','p','dx','c','q_out']
         for ii,field in enumerate(out[:4]): # all of the fields
@@ -333,6 +334,7 @@ class model():
         # For saving
 #         import matplotlib
 #         matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
         import matplotlib.animation as animation
         from matplotlib.animation import FFMpegWriter
 
