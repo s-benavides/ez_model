@@ -284,7 +284,7 @@ class model():
 #########################################
 ####       Plots and Moves      #########
 #########################################
-    def plot_min(self):
+    def plot_min(self,save=False):
         """
         Plots the physically relevant fields: z and e.
         """
@@ -305,10 +305,17 @@ class model():
 #         ax3.plot(meanz[0]-np.sqrt(1/(9.*self.c_0)-1)*x,'--r')
         ax3.set_ylabel("Height")
         ax3.set_xlabel(r"$x$")
+        
+        plt.tight_layout()
+        
+        if save:
+            name = input("Name the figure: ") 
+            plt.savefig(name,dpi=300,bbox_inches='tight')
+        
         plt.show()
         return
    
-    def plot_all(self):
+    def plot_all(self,save=False):
         """
         Plots all fields:
         """
@@ -324,6 +331,13 @@ class model():
             
         plt.plot(out[4])
         plt.title("c")
+
+        plt.tight_layout()
+        
+        if save:
+            name = input("Name the figure: ") 
+            plt.savefig(name,dpi=300,bbox_inches='tight')
+        
         plt.show()
         return
         
