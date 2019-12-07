@@ -300,9 +300,9 @@ class model():
         im = ax2.imshow(self.z,vmin=0,vmax=np.max(self.z),cmap=cm.Greens)
         ax2.set_title("Height field")
         fig.colorbar(im,ax=ax2,orientation='horizontal')
-        ax1.set_xticklabels([])
-        ax1.set_yticklabels([])
-        ax1.tick_params(axis='both',bottom=False,left=False)
+        ax2.set_xticklabels([])
+        ax2.set_yticklabels([])
+        ax2.tick_params(axis='both',bottom=False,left=False)
         #
         meanz = np.mean(self.z,axis=0)
         ax3.plot(meanz,'.k')
@@ -310,6 +310,9 @@ class model():
 #         ax3.plot(meanz[0]-np.sqrt(1/(9.*self.c_0)-1)*x,'--r')
         ax3.set_ylabel("Height")
         ax3.set_xlabel(r"$x$")
+#         bbox=plt.gca().get_position()
+#         offset=-.15
+#         plt.gca().set_position([bbox.x0, bbox.y0 + offset, bbox.x1-bbox.x0, bbox.y1 - bbox.y0])
         
         plt.tight_layout()
         
@@ -381,7 +384,7 @@ class model():
         n_frames = len(zs)
         
         # create a figure with two subplots
-        fig,(ax1,ax2,ax3)=plt.subplots(3,1)#,figsize=(8,8))
+        fig,(ax1,ax2,ax3)=plt.subplots(3,1,figsize=(4,4))
 
         # initialize two axes objects (one in each axes)
         im_e = ax1.imshow(es[0],vmin=0,vmax=1,cmap='binary')
@@ -401,9 +404,7 @@ class model():
         ax3.set_xlabel(r"$t$")
         ax3.set_ylim(0,np.max(qs))
         ax3.set_xlim(0,t_steps)
-        bbox=plt.gca().get_position()
-        offset=-.15
-        plt.gca().set_position([bbox.x0, bbox.y0 + offset, bbox.x1-bbox.x0, bbox.y1 - bbox.y0])
+        plt.tight_layout()
 
 
         ### Animate function
