@@ -289,15 +289,20 @@ class model():
         Plots the physically relevant fields: z and e.
         """
         import matplotlib.pyplot as plt
+        import matplotlib.cm as cm
         fig,(ax1,ax2,ax3)=plt.subplots(3,1,figsize=(8,8))
-        ax1.imshow(self.e,vmin=0,vmax=1)
+        ax1.imshow(self.e,vmin=0,vmax=1,cmap='binary')
+        ax1.set_xticklabels([])
+        ax1.set_yticklabels([])
+        ax1.tick_params(axis='both',bottom=False,left=False)
         ax1.set_title("Entrainment Field")
-        ax1.axis("off")
         #
-        im = ax2.imshow(self.z,vmin=0,vmax=np.max(self.z))
+        im = ax2.imshow(self.z,vmin=0,vmax=np.max(self.z),cmap=cm.Greens)
         ax2.set_title("Height field")
         fig.colorbar(im,ax=ax2,orientation='horizontal')
-        ax2.axis("off")
+        ax1.set_xticklabels([])
+        ax1.set_yticklabels([])
+        ax1.tick_params(axis='both',bottom=False,left=False)
         #
         meanz = np.mean(self.z,axis=0)
         ax3.plot(meanz,'.k')
@@ -379,19 +384,27 @@ class model():
         fig,(ax1,ax2,ax3)=plt.subplots(3,1)#,figsize=(8,8))
 
         # initialize two axes objects (one in each axes)
-        im_e = ax1.imshow(es[0],vmin=0,vmax=1)
+        im_e = ax1.imshow(es[0],vmin=0,vmax=1,cmap='binary')
         im_z, = ax2.plot(zs[-1],'.k')      
         im_q, = ax3.plot(np.zeros(len(qs)),'-k',lw=1)
 
         # set titles and labels
+        ax1.set_xticklabels([])
+        ax1.set_yticklabels([])
+        ax1.tick_params(axis='both',bottom=False,left=False)
         ax1.set_title("Entrainment Field")
-        ax1.axis("off")
         ax2.set_ylabel("Height")
         ax2.set_xlabel(r"$x$")
+        ax2.set_xlim(0,self.Nx)
         ax2.set_ylim(0,np.max(zs[-1]))
         ax3.set_ylabel(r"$q$")
         ax3.set_xlabel(r"$t$")
         ax3.set_ylim(0,np.max(qs))
+        ax3.set_xlim(0,t_steps)
+        bbox=plt.gca().get_position()
+        offset=-.15
+        plt.gca().set_position([bbox.x0, bbox.y0 + offset, bbox.x1-bbox.x0, bbox.y1 - bbox.y0])
+
 
         ### Animate function
         def animate(frame):
