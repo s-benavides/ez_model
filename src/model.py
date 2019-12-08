@@ -291,13 +291,13 @@ class model():
         import matplotlib.pyplot as plt
         import matplotlib.cm as cm
         fig,(ax1,ax2,ax3)=plt.subplots(3,1,figsize=(8,8))
-        ax1.imshow(self.e,vmin=0,vmax=1,cmap='binary')
+        ax1.imshow(self.e,vmin=0,vmax=1,cmap='binary',aspect=self.Nx/(5*self.Ny))
         ax1.set_xticklabels([])
         ax1.set_yticklabels([])
         ax1.tick_params(axis='both',bottom=False,left=False)
         ax1.set_title("Entrainment Field")
         #
-        im = ax2.imshow(self.z,vmin=0,vmax=np.max(self.z),cmap=cm.Greens)
+        im = ax2.imshow(self.z,vmin=0,vmax=np.max(self.z),cmap=cm.Greens,aspect=self.Nx/(5*self.Ny))
         ax2.set_title("Height field")
         fig.colorbar(im,ax=ax2,orientation='horizontal')
         ax2.set_xticklabels([])
@@ -387,7 +387,7 @@ class model():
         fig,(ax1,ax2,ax3)=plt.subplots(3,1,figsize=(4,4))
 
         # initialize two axes objects (one in each axes)
-        im_e = ax1.imshow(es[0],vmin=0,vmax=1,cmap='binary')
+        im_e = ax1.imshow(es[0],vmin=0,vmax=1,cmap='binary',aspect=self.Nx/(5*self.Ny))
         im_z, = ax2.plot(zs[-1],'.k')      
         im_q, = ax3.plot(np.zeros(len(qs)),'-k',lw=1)
 
