@@ -354,9 +354,11 @@ class model():
         Takes t_steps number of time-steps from *current* state and exports a movie in 'odir' directory that is 'duration' seconds long. You can also add to the end of the name with the command 'name_add=_(your name here)' (make sure to include the underscore).
         """
         # For saving
-#         import matplotlib
+#         import matplotlib as mpl
 #         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
+        # Resets any externally exposed parameters for movie (otherwise movie might look weird)
+        plt.rcParams.update(plt.rcParamsDefault)  
         import matplotlib.animation as animation
         from matplotlib.animation import FFMpegWriter
 
