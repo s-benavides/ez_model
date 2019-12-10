@@ -298,7 +298,7 @@ class model():
         ax1.set_title("Entrainment Field")
         #
         im = ax2.imshow(self.z,vmin=0,vmax=np.max(self.z),cmap=cm.Greens,aspect=self.Nx/(5*self.Ny))
-        ax2.set_title("Height field")
+        ax2.set_title("Height Field")
         fig.colorbar(im,ax=ax2,orientation='horizontal')
         ax2.set_xticklabels([])
         ax2.set_yticklabels([])
