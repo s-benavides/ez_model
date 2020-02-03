@@ -116,7 +116,7 @@ function step!(model :: EZModel{S,T}) where {S,T}
     model.p = p_calc(model) #DONE
         
     ## Update new (auxiliary) entrainment matrix, given only p
-    .ep = e_update(model) #DONE
+    model.ep = e_update(model) #DONE
         
     ## Calculates q_out based on e[:,-skipmax:]
     model.q_out = q_out_calc(model) #DONE
