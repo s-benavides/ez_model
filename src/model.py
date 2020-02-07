@@ -122,7 +122,7 @@ class model():
         """
         # First need to calculate avg local slope
         #Avg z along y-direction (0th component):
-        z_avg = np.mean(self.z, axis=0, dtype=int)
+        z_avg = np.mean(self.z, axis=0)   # NOTE: this is now a FLOAT, not an integer, like z. 
         
         # Central diff slope for bulk:
         s = (np.roll(z_avg,-int(self.x_avg/2)) - np.roll(z_avg,int(self.x_avg/2)))/np.float(self.x_avg) 
