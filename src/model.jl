@@ -1,4 +1,5 @@
 using Random
+using Statistics
 
 """ 
 mutable struct Out
@@ -48,7 +49,7 @@ struct EZModel{S,T} # S :: UInt32 or UInt64, T :: Float64
 end
 
 # Initialize an instance
-function EZModel{S,T}(Nx,Ny,q_in,x_avg,c_0,skipmax) where{S,T}
+function EZModel{S,T}(Nx,Ny,x_avg,c_0,skipmax,q_in) where {S,T}
 
     ## First make sure that we satisfy some properties for consistency:
     if x_avg % 2 != 0
@@ -105,32 +106,109 @@ end
 """
 Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [c,dx,p,e,z,q_out].
 """
-function step!(model :: EZModel{S,T}) where {S,T}
+function step!(model)
     ## Calculates c, given z, c_0, and x_avg
     model.c .= c_calc(model)   # Using .= because changing values of array, but not pointing to new array
         
     ## Recalculates dx randomly
-    model.dx = dx_calc(model) 
+    model.dx .= dx_calc(model) 
         
     ## Calculates probabilities, given c, e, and dx
-    model.p = p_calc(model) #DONE
+    model.p .= p_calc(model) 
         
     ## Update new (auxiliary) entrainment matrix, given only p
-    model.ep = e_update(model) #DONE
+    model.ep .= e_update(model) 
         
     ## Calculates q_out based on e[:,-skipmax:]
-    model.q_out = q_out_calc(model) #DONE
+    model.out = q_out_calc(model) 
     
     ## Update height, given e and ep.
-    model.z = z_update(model) #DONE
+    model.z .= z_update(model)
     
     ## Copies and auxiliary entrainment matrix
-    model.e = copy(model.ep)
+    model.e .= copy(model.ep)
         
     ## We drop q_in number of grains (randomly) at the head of the flume.
     inds = randperm!(Vector{Int16}(undef,model.Ny))[1:model.q_in]
-    model.e[inds,0] = true    
+    model.e[inds,1] = true    
      
     return nothing
 end
 
+#####################
+# Calculation of dx #
+#####################
+"""
+Calculates dx from randint(1,high=skipmax). Returns dx.
+"""    
+function dx_calc(model)        
+#         return np.random.randint(1,high = self.skipmax+1,size=(self.Ny,self.Nx))
+    s = s_calc(model) 
+    skip_x = model.skipmax .*sqrt.(s.^2 .+1)
+    skip_x[skip_x.>(model.Nx/10)] .= model.Nx/10
+    skip_x[s.>0] .= 0
+    skip_x = convert.(Int16, round.(skip_x, digits=0)) # converting to integer
+    dx = Int16.(zeros(model.Ny,model.Nx))
+    for i in 1:model.Nx
+        dx[:,i]=rand!(Int16.(zeros(model.Ny)),collect(0:(skip_x[i]+1)))
+    end
+        
+    return dx
+end
+
+################################
+# Calculating slope based on z.#
+################################
+# x_avg = number of points you average over (integer)
+"""
+Calculates local slope given z and x_avg.
+"""
+function s_calc(model)
+    # First need to calculate avg local slope
+    #Avg z along y-direction (1st component):
+    z_avg = mean!(ones(1,model.Nx),model.z)  # NOTE: this is now a FLOAT, not an integer, like z. 
+        
+    # Central diff slope for bulk:
+    s = zeros(1,model.Nx)
+    for i in 1:model.Nx
+        s[i] = (z_avg[i+Int16(model.x_avg/2)] - z_avg[i-Int16(model.x_avg/2)])/model.x_avg 
+    end
+
+    # Endpoints are messed up so we just average until the end here:
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    ############ FINISH!!! HERE
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    for i in 1:Int16(self.x_avg/2)
+        s[i] = (z_avg[2*i] - z_avg[1])/(2*i)
+        s[-(i+1)] = (z_avg[-1] - z_avg[-(2*i+1)])/(2*i)
+
+    # For the first and last points we set slope at half step:
+    s[0] = z_avg[1]-z_avg[0]
+    s[-1] = z_avg[-1]-z_avg[-2]
+
+#       # A different possibility
+#       # Look only at what's one ahead of you:
+#       s = np.roll(z_avg,-1) - z_avg
+
+#       # Endpoints are messed up so we just average until the end here:
+#       s[-1] = s[-2]   # set it to be slope of second to last point.
+            
+    return s
+end
