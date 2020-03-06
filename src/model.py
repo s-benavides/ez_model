@@ -368,11 +368,11 @@ class model():
         ### Make the data:
         zs = [np.mean(self.z,axis=0)]
         es = [self.e]
-        qs = [self.q_out/self.Ny]
+        qs = [np.sum(self.e)/(self.Nx*self.Ny)]#self.q_out/self.Ny]
         dt = 0
         for frame in tqdm.tqdm(range(t_steps)):
             self.step()
-            qs.append(self.q_out/self.Ny)  
+            qs.append(np.sum(self.e)/(self.Nx*self.Ny))  
             dt+=1 
             if dt % dt_frame ==0:
                 dt = 0
