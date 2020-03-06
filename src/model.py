@@ -404,6 +404,7 @@ class model():
         ax2.set_ylim(0,np.max(zs[-1]))
         ax3.set_ylabel(r"$q$")
         ax3.set_xlabel(r"$t$")
+        ax3.axhline(y=run.q_in/run.Ny,ls='--',color='k')
         ax3.set_ylim(0,np.max(qs))
         ax3.set_xlim(0,t_steps)
         plt.tight_layout()
