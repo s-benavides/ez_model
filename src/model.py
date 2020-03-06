@@ -14,7 +14,7 @@ class model():
         ----------
         Nx: number of gridpoints in x-direction
         Ny: number of gridpoints in y-direction
-        q_in: number of entrained particles at top of the bed (flux in). q_in <= Ny!
+        q_in: number of entrained particles at top of the bed (flux in). Can be less than one but must be rational! q_in <= Ny!
         x_avg: distance (in # of grid points) over which to average for avg. local slope
         c_0: collision coefficient at zero slope.
         skipmax: dx skip max. Will draw randomly from 1 to skipmax for dx.
@@ -43,7 +43,7 @@ class model():
         # Start with none entrained
         self.e = np.zeros((Ny,Nx),dtype=bool)
         # We drop q_in number of grains (randomly) at the beginning.
-        inds = np.random.choice(Ny,q_in,replace=False)
+        inds = np.random.choice(Ny,max(q_in,1),replace=False)
         self.e[inds,0] = True
         # The auxiliary e:
         self.ep = np.zeros((Ny,Nx),dtype=bool)
@@ -51,6 +51,8 @@ class model():
         self.p = np.zeros((Ny,Nx))
         ## Flux out:
         self.q_out = int(0)
+        ## Time:
+        self.t = int(0)
         
         ## Initiates calculations:
         # Jump lengths
@@ -91,8 +93,19 @@ class model():
         self.e = np.copy(self.ep)
         
         ## We drop q_in number of grains (randomly) at the head of the flume.
-        inds = np.random.choice(self.Ny,self.q_in,replace=False)
-        self.e[inds,0] = True
+        # If q_in < 1, then we drop 1 bead every 1/q_in time steps.
+        if self.q_in < 1:
+            if self.t % int(1/self.q_in) == 0:
+                inds = np.random.choice(self.Ny,1,replace=False)
+                self.e[inds,0] = True
+            else:
+                pass
+        else:
+            inds = np.random.choice(self.Ny,self.q_in,replace=False)
+            self.e[inds,0] = True
+        
+        ## Add to time:
+        self.t += 1
         
     #####################
     # Calculation of dx #
@@ -277,7 +290,7 @@ class model():
         Exports full data into directory 'odir', named with today's date.
         """
         c0str = str(self.c_0).replace(".", "d")
-        name = odir+ 'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+str(self.q_in)+'_xavg_'+str(self.x_avg)+'_c0_'+c0str+'_skip_'+str(self.skipmax)+'_'+str(date.today())+'.p'
+        name = odir+ 'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+str(self.q_in).replace(".","d")+'_xavg_'+str(self.x_avg)+'_c0_'+c0str+'_skip_'+str(self.skipmax)+'_'+str(date.today())+'.p'
         pickle.dump(self.get_state(), open(str(name), 'wb'))
         return
     
@@ -441,7 +454,7 @@ class model():
         # Try to set the DPI to the actual number of pixels you're plotting
         writer = FFMpegWriter(fps=fps, metadata=dict(artist='Me'), bitrate=1800)
         c0str = str(self.c_0).replace(".", "d")
-        name = odir+'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+str(self.q_in)+'_xavg_'+str(self.x_avg)+'_c0_'+c0str+'_skip_'+str(self.skipmax)+'_'+str(date.today())+name_add+'.mp4'
+        name = odir+'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+str(self.q_in).replace(".","d")+'_xavg_'+str(self.x_avg)+'_c0_'+c0str+'_skip_'+str(self.skipmax)+'_'+str(date.today())+name_add+'.mp4'
         sim.save(name, dpi=300, writer=writer)
 
         return
