@@ -43,7 +43,7 @@ class model():
         # Start with none entrained
         self.e = np.zeros((Ny,Nx),dtype=bool)
         # We drop q_in number of grains (randomly) at the beginning.
-        inds = np.random.choice(Ny,max(q_in,1),replace=False)
+        inds = np.random.choice(Ny,max(int(q_in),1),replace=False)
         self.e[inds,0] = True
         # The auxiliary e:
         self.ep = np.zeros((Ny,Nx),dtype=bool)
@@ -101,7 +101,7 @@ class model():
             else:
                 pass
         else:
-            inds = np.random.choice(self.Ny,self.q_in,replace=False)
+            inds = np.random.choice(self.Ny,int(self.q_in),replace=False)
             self.e[inds,0] = True
         
         ## Add to time:
