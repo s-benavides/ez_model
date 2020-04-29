@@ -244,7 +244,7 @@ class model():
             inds_dep = np.random.choice(len(inds),abs(dp),replace=False)
             for ind in inds[inds_dep]:
                 if self.dx[ind[0],ind[1]] + ind[1]<=self.Nx-1:  # Not counting things that went outside
-                    z_temp[(ind[0],ind[1]+self.dx[tuple(ind)])]+=1
+                    z_temp[tuple(ind)]+=1
                 
         elif dp>0:  #particle(s) entrained
             # Remove particles where ep is True
