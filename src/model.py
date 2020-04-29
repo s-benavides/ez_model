@@ -166,7 +166,7 @@ class model():
     ###########################
     def q_out_calc(self):
         """
-        Calculates and returns q_out, the flux of grains leaving the domain.
+        Calculates and returns q_out, the number of grains leaving the domain.
         """
         q_out_temp = int(0)
         for y,x in np.argwhere(self.e):
@@ -174,6 +174,15 @@ class model():
                 q_out_temp += 1
         return q_out_temp    
 
+    ##################################
+    # Calculates bed activity (flux) #
+    ##################################
+    def bed_activity(self):
+        """
+        Calculates and returns the bed activity, the flux of grains in motion within the domain.
+        """
+        return np.sum(self.e)/(self.Nx*self.Ny)    
+    
         
     ######################
     # Update entrainment #
