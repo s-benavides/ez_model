@@ -24,6 +24,8 @@ class model():
 
         self.c_0 = c_0
         self.skipmax = int(skipmax)
+        if ((1/self.skipmax)>=np.sqrt((1/(3.*self.c_0))**2-1)):
+            print("c_0 is too large! Discreteness will have trouble resolving slope.")
         if q_in>Ny:
             print("q_in > Ny ! Setting q_in = Ny.")
             self.q_in = Ny
@@ -105,7 +107,7 @@ class model():
     #####################
     def dx_calc(self):
         """
-        Calculates dx from randint(1,high=skipmax). Returns dx.
+        Calculates dx from binomial distribution with mean skipmax and variance skipmax/2. Returns dx.
         """            
         dx = np.zeros((self.Ny,self.Nx),dtype=int)
     
@@ -320,16 +322,13 @@ class model():
         """
         import matplotlib.pyplot as plt
         out = self.get_state() #[z,e,p,dx,c,q_out]
-        names = ['z','e','p','dx','c','q_out']
+        names = ['z','e','p','dx','q_out']
         for ii,field in enumerate(out[:4]): # all of the fields
             im=plt.imshow(field)
             plt.title("%s" % names[ii])
             if names[ii] in ['z','p','dx']:
                 plt.colorbar(im)
             plt.show()
-            
-        plt.plot(out[4])
-        plt.title("c")
 
         plt.tight_layout()
         
