@@ -29,8 +29,8 @@ class ez():
         ####################
         ## INITIAL fields ##
         ####################
-        ## Height. Start with z = 0 everywhere.
-        self.z = np.zeros((Ny,Nx),dtype=int)
+        ## Height. Start with z = 100 everywhere. (to avoid negative values of z)
+        self.z = 100*np.ones((Ny,Nx),dtype=int)
         ## Entrained or not
         # Start with none entrained
         self.e = np.zeros((Ny,Nx),dtype=bool)
@@ -78,7 +78,7 @@ class ez():
         """
         
         if self.dx[y,x]>0:
-            s = (self.z[(y+dy)%self.Ny,(x+dx)%self.Nx]-self.z[y,x])/self.dx[y,x]
+            s = (self.z[(y+dy)%self.Ny,(x+dx)%self.Nx]-self.z[y,x])/(self.dx[y,x])
         else:
             s =0.0
             
@@ -218,7 +218,10 @@ class ez():
         
     def make_movie(self, t_steps, duration, odir,fps=24,name_add=''):
         """
-        Takes t_steps number of time-steps from *current* state and exports a movie in 'odir' directory that is 'duration' seconds long. You can also add to the end of the name with the command 'name_add=_(your name here)' (make sure to include the underscore).
+        Takes t_steps number of time-steps from *current* state and exports a movie in 'odir' directory that is a maximum of 'duration' seconds long. 
+        Note that if the number of frames, in combination with the frames per second, makes a duration less than 20 seconds then it will be 1 fps and will last
+        frames seconds long. 
+        You can also add to the end of the name with the command 'name_add=_(your name here)' (make sure to include the underscore).
         """
         # For saving
         # import matplotlib as mpl
@@ -228,14 +231,10 @@ class ez():
         plt.rcParams.update(plt.rcParamsDefault)  
         import matplotlib.animation as animation
         from matplotlib.animation import FFMpegWriter
-        import os
-        
-        # For clearing print statements
-        def clear():
-            os.system( 'cls' )
+        from IPython.display import clear_output
 
         # Calculate how many steps to skip before each save
-        dt_frame = int((t_steps)/(fps*duration))
+        dt_frame = np.max((int((t_steps)/(fps*duration)),1))
         
         ### Make the data:
         zs = [np.mean(self.z[:,2:],axis=0)]
@@ -288,8 +287,9 @@ class ez():
             Animation function. Takes the current frame number (to select the potion of
             data to plot) and a plot object to update.
             """
-            clear()
-            print("Working on frame %s of %s" % (frame+1,len(qs)))
+            
+            print("Working on frame %s of %s" % (frame+1,len(zs)))
+            clear_output(wait=True)
             
             q_temp = np.zeros(len(qs))
             q_temp[:frame*dt_frame] = qs[:frame*dt_frame]
@@ -459,10 +459,10 @@ class set_qin(ez):
             inds = np.argwhere(self.ep)
             inds_dep = np.random.choice(len(inds),abs(dp),replace=False)
             for ind in inds[inds_dep]:
-                z_temp[tuple(ind)]-=1
+                z_temp[tuple(ind)]+=-1
                 
         # Sets any negative z to zero (although this should not happen...)
-        for i in np.where(self.z<0)[0][0:1]:
+        if (z_temp<0).any():
             print("NEGATIVE Z!")
         z_temp[z_temp<0] = 0
         
@@ -482,7 +482,7 @@ class set_f(ez):
     In this model, the main input parameter is f, which is the probability that extreme events in fluid stresses entrain a grain and move it downstream.
     The entrained grains flow out of one end and, importantly, come back into the other end: this mode has periodic boundary conditions in all directions.
     """
-    def __init__(self,Nx,Ny,f,c_0,skipmax):
+    def __init__(self,Nx,Ny,f,c_0,skipmax,initial=0.01):
         """
         Initialize the model
         Parameters for set_qin subclass
@@ -495,6 +495,10 @@ class set_f(ez):
         """
         super().__init__(Nx,Ny,c_0,skipmax)        
         self.f = f
+
+        # Start with random number entrained
+        A = np.random.rand(self.Ny,self.Nx)
+        self.e = A<initial
         
     #########################################
     ####       Dynamics and Calcs      ######
@@ -505,24 +509,24 @@ class set_f(ez):
     ####################
     def step(self):     
         """
-        Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [dx,p,e,z,q_out].
+        Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [dx,p,e,z].
         """
-        
+
         ## Recalculates dx randomly
         self.dx = self.dx_calc() 
-        
+
         ## Calculates probabilities, given c, e, and dx
         self.p = self.p_calc() 
-        
+
         ## Update new (auxiliary) entrainment matrix, given only p
         self.ep = self.e_update() 
         
         ## Update height, given e and ep.
-        self.z = self.z_update() #DONE
-        
+        self.z = self.z_update() 
+
         ## Copies and auxiliary entrainment matrix
-        self.e = np.copy(self.ep)
-        
+        self.e = np.copy(self.ep)    
+
         ## Add to time:
         self.t += 1
 
@@ -539,10 +543,18 @@ class set_f(ez):
         # Add probabilities of entrainment based on previous e and c matrix.
         # Periodic boundary conditions in both x and y-direction!
         for y,x in np.argwhere(self.e):
-            p_temp[y,(x+self.dx[y,x])%self.Nx]   = np.min((1,p_temp[y,(x+self.dx[y,x])%self.Nx] +self.c_calc(y,x,0,self.dx[y,x])))
-            p_temp[(y+1)%self.Ny,(x+self.dx[y,x])%self.Nx] = np.min((1,p_temp[(y+1)%self.Ny,(x+self.dx[y,x])%self.Nx]+self.c_calc(y,x,1,self.dx[y,x])))
-            p_temp[(y-1)%self.Ny,(x+self.dx[y,x])%self.Nx] = np.min((1,p_temp[(y-1)%self.Ny,(x+self.dx[y,x])%self.Nx]+self.c_calc(y,x,-1,self.dx[y,x])))
-        
+            # Have to be careful when calculating the slope (which is done in c_calc) with periodic boundary conditions. 
+            # For cells that are outside of the domain, we'll calculate the slope (and c_calc) a few points back and just assume it's the same slope.
+            if (x+self.dx[y,x])>(self.Nx-1):
+                dxx = x+self.dx[y,x]-(self.Nx-1) # How far outside domain we are. We will shift location by this much
+                p_temp[y,(x+self.dx[y,x])%self.Nx]   = np.min((1,p_temp[y,(x+self.dx[y,x])%self.Nx] +self.c_calc(y,x-dxx,0,self.dx[y,x])))
+                p_temp[(y+1)%self.Ny,(x+self.dx[y,x])%self.Nx] = np.min((1,p_temp[(y+1)%self.Ny,(x+self.dx[y,x])%self.Nx]+self.c_calc(y,x-dxx,1,self.dx[y,x])))
+                p_temp[(y-1)%self.Ny,(x+self.dx[y,x])%self.Nx] = np.min((1,p_temp[(y-1)%self.Ny,(x+self.dx[y,x])%self.Nx]+self.c_calc(y,x-dxx,-1,self.dx[y,x])))
+            else:
+                p_temp[y,(x+self.dx[y,x])%self.Nx]   = np.min((1,p_temp[y,(x+self.dx[y,x])%self.Nx] +self.c_calc(y,x,0,self.dx[y,x])))
+                p_temp[(y+1)%self.Ny,(x+self.dx[y,x])%self.Nx] = np.min((1,p_temp[(y+1)%self.Ny,(x+self.dx[y,x])%self.Nx]+self.c_calc(y,x,1,self.dx[y,x])))
+                p_temp[(y-1)%self.Ny,(x+self.dx[y,x])%self.Nx] = np.min((1,p_temp[(y-1)%self.Ny,(x+self.dx[y,x])%self.Nx]+self.c_calc(y,x,-1,self.dx[y,x])))
+
         return p_temp
 
     #################
@@ -569,10 +581,10 @@ class set_f(ez):
             inds = np.argwhere(self.ep)
             inds_dep = np.random.choice(len(inds),abs(dp),replace=False)
             for ind in inds[inds_dep]:
-                z_temp[tuple(ind)]-=1
-                
+                z_temp[tuple(ind)]+=-1
+            
         # Sets any negative z to zero (although this should not happen...)
-        for i in np.where(self.z<0)[0][0:1]:
+        if (z_temp<0).any():
             print("NEGATIVE Z!")
         z_temp[z_temp<0] = 0
         
