@@ -116,7 +116,74 @@ class ez():
         A[rndc<self.p] = True
         
         return A
+
+    #################
+    # Update height #
+    #################
+    def z_update(self,periodic=False):
+        """
+        Calculates and returns z, given e (pre-time-step) and ep (post-time-step) entrainment matrices. Does so in a way that conserves grains (unles they leave the domain).
+        """
+        z_temp = np.copy(self.z)
+        e_temp = np.copy(self.e)
         
+        ###############################################
+        # (1) Grains that leave domain don't deposit: # 
+        ###############################################
+        if not periodic:
+            for y,x in np.argwhere(self.e):
+                if self.dx[y,x] + x>self.Nx-1:
+                    e_temp[y,x] = False # Change e_temp so these don't appear in the next count, step (2)     
+                
+                
+        ###########################################################
+        # (2) Deposite grains tha twere entrained last time-step: #
+        ###########################################################
+        # - We want a deposited grain to be depositied at the lowest point in the vicinity of the entrainment location
+        inds = np.where(e_temp)
+        inds = np.transpose(inds)
+        for ind in inds:
+            y,x = ind
+            if periodic:
+                minx = (-1+x)%self.Nx
+                maxx = (1+x)%self.Nx
+            else:
+                minx = np.max((0,-1+x))
+                maxx = np.min((self.Nx-1,1+x))
+
+            # Define "kernel" of where we're looking. Looks around +/- 1 in x and y for min value of z
+            tuples = np.array([[tuple(((-1+y)%self.Ny,minx)),tuple(((-1+y)%self.Ny,x)),tuple(((-1+y)%self.Ny,maxx))],
+                              [tuple((y,minx)),tuple((y,x)),tuple((y,maxx))],
+                              [tuple(((1+y)%self.Ny,minx)),tuple(((1+y)%self.Ny,x)),tuple(((1+y)%self.Ny,maxx))],
+                              ])
+            temp= np.array([[self.z[(-1+y)%self.Ny,minx],self.z[(-1+y)%self.Ny,x],self.z[(-1+y)%self.Ny,maxx]],
+                           [self.z[y,minx],self.z[y,x],self.z[y,maxx]],
+                           [self.z[(1+y)%self.Ny,minx],self.z[(1+y)%self.Ny,x],self.z[(1+y)%self.Ny,maxx]],
+                           ])
+            # For periodic boundary conditions, the x location are randomly determined and y location is still minimum.
+            if (periodic)&(x==0 or x==(self.Nx-1)):
+                col = np.random.randint(3, size=1)
+                row = np.argmin(temp[:,col])
+                indm = tuple(tuples[row,col[0]])
+            else:
+                indm = np.unravel_index(np.argmin(temp, axis=None), temp.shape)
+                indm = tuple(tuples[indm])
+            z_temp[indm]+=1
+
+        #########################################################
+        # (3) Remove grains tha twere entrained this time-step: #
+        #########################################################
+        # Now we take away wherever is entrained the current moment.
+        z_temp[np.where(self.ep)]+=-1
+    
+        # Sets any negative z to zero (although this should not happen...)
+        if (z_temp<0).any():
+            print("NEGATIVE Z!")
+            print(np.where(z_temp<0))
+        z_temp[z_temp<0] = 0
+        
+        return z_temp
+    
     #########################################
     ####       Import/Export      ###########
     #########################################
@@ -321,7 +388,7 @@ class ez():
 
         return
 
-class set_qin(ez):
+class set_q(ez):
     """
     This mode is set up to replicate experiments, where the grains are dropped in on one end at a fixed rate q_in, the main input parameter of this mode, 
     and then flow downstream. These grains then flow out and are measured, but they are not re-introduced.
@@ -330,7 +397,7 @@ class set_qin(ez):
     def __init__(self,Nx,Ny,q_in,c_0,skipmax):
         """
         Initialize the model
-        Parameters for set_qin subclass
+        Parameters for set_q subclass
         ----------
         Nx: number of gridpoints in x-direction
         Ny: number of gridpoints in y-direction
@@ -415,12 +482,16 @@ class set_qin(ez):
         # Periodic boundary conditions in y-direction!
         for y,x in np.argwhere(self.e):
             if self.dx[y,x] + x<=self.Nx-1:  # Not counting things that went outside
-                p_temp[y,x+self.dx[y,x]]   = np.min((1,p_temp[y,x+self.dx[y,x]] +self.c_calc(y,x,0,self.dx[y,x])))
-                p_temp[(y+1)%self.Ny,x+self.dx[y,x]] = np.min((1,p_temp[(y+1)%self.Ny,x+self.dx[y,x]]+self.c_calc(y,x,1,self.dx[y,x])))
-                p_temp[(y-1)%self.Ny,x+self.dx[y,x]] = np.min((1,p_temp[(y-1)%self.Ny,x+self.dx[y,x]]+self.c_calc(y,x,-1,self.dx[y,x])))
+                p_temp[y,(x+self.dx[y,x])%self.Nx]   += self.c_calc(y,x,0,self.dx[y,x])
+                p_temp[(y+1)%self.Ny,(x+self.dx[y,x])%self.Nx] += self.c_calc(y,x,1,self.dx[y,x])
+                p_temp[(y-1)%self.Ny,(x+self.dx[y,x])%self.Nx] += self.c_calc(y,x,-1,self.dx[y,x])
+        
+        # Make sure p = 1 is the max value.
+        p_temp[p_temp>1]=1.0
         
         return p_temp
 
+    
     ###########################
     # Calculates q_out (flux) #
     ###########################
@@ -434,39 +505,6 @@ class set_qin(ez):
                 q_out_temp += 1
         return q_out_temp    
 
-    #################
-    # Update height #
-    #################
-    def z_update(self):
-        """
-        Calculates and returns z, given e (pre-time-step) and ep (post-time-step) entrainment matrices.
-        """
-        z_temp = np.copy(self.z)
-        
-        # Calculate total change in entrainment
-        dp = np.sum(self.ep)+self.q_out-np.sum(self.e) 
-        
-        if dp<0:  #particle(s) detrained
-            # Add particles where e is True
-            inds = np.argwhere(self.e)
-            inds_dep = np.random.choice(len(inds),abs(dp),replace=False)
-            for ind in inds[inds_dep]:
-                if self.dx[ind[0],ind[1]] + ind[1]<=self.Nx-1:  # Not counting things that went outside
-                    z_temp[tuple(ind)]+=1
-                
-        elif dp>0:  #particle(s) entrained
-            # Remove particles where ep is True
-            inds = np.argwhere(self.ep)
-            inds_dep = np.random.choice(len(inds),abs(dp),replace=False)
-            for ind in inds[inds_dep]:
-                z_temp[tuple(ind)]+=-1
-                
-        # Sets any negative z to zero (although this should not happen...)
-        if (z_temp<0).any():
-            print("NEGATIVE Z!")
-        z_temp[z_temp<0] = 0
-        
-        return z_temp
 
     #########################################
     ####       Import/Export      ###########
@@ -485,7 +523,7 @@ class set_f(ez):
     def __init__(self,Nx,Ny,f,c_0,skipmax,initial=0.01):
         """
         Initialize the model
-        Parameters for set_qin subclass
+        Parameters for set_f subclass
         ----------
         Nx: number of gridpoints in x-direction
         Ny: number of gridpoints in y-direction
@@ -522,7 +560,7 @@ class set_f(ez):
         self.ep = self.e_update() 
         
         ## Update height, given e and ep.
-        self.z = self.z_update() 
+        self.z = self.z_update(periodic=True) 
 
         ## Copies and auxiliary entrainment matrix
         self.e = np.copy(self.ep)    
@@ -547,48 +585,18 @@ class set_f(ez):
             # For cells that are outside of the domain, we'll calculate the slope (and c_calc) a few points back and just assume it's the same slope.
             if (x+self.dx[y,x])>(self.Nx-1):
                 dxx = x+self.dx[y,x]-(self.Nx-1) # How far outside domain we are. We will shift location by this much
-                p_temp[y,(x+self.dx[y,x])%self.Nx]   = np.min((1,p_temp[y,(x+self.dx[y,x])%self.Nx] +self.c_calc(y,x-dxx,0,self.dx[y,x])))
-                p_temp[(y+1)%self.Ny,(x+self.dx[y,x])%self.Nx] = np.min((1,p_temp[(y+1)%self.Ny,(x+self.dx[y,x])%self.Nx]+self.c_calc(y,x-dxx,1,self.dx[y,x])))
-                p_temp[(y-1)%self.Ny,(x+self.dx[y,x])%self.Nx] = np.min((1,p_temp[(y-1)%self.Ny,(x+self.dx[y,x])%self.Nx]+self.c_calc(y,x-dxx,-1,self.dx[y,x])))
+                p_temp[y,(x+self.dx[y,x])%self.Nx]   += self.c_calc(y,x-dxx,0,self.dx[y,x])
+                p_temp[(y+1)%self.Ny,(x+self.dx[y,x])%self.Nx] += self.c_calc(y,x-dxx,1,self.dx[y,x])
+                p_temp[(y-1)%self.Ny,(x+self.dx[y,x])%self.Nx] += self.c_calc(y,x-dxx,-1,self.dx[y,x])
             else:
-                p_temp[y,(x+self.dx[y,x])%self.Nx]   = np.min((1,p_temp[y,(x+self.dx[y,x])%self.Nx] +self.c_calc(y,x,0,self.dx[y,x])))
-                p_temp[(y+1)%self.Ny,(x+self.dx[y,x])%self.Nx] = np.min((1,p_temp[(y+1)%self.Ny,(x+self.dx[y,x])%self.Nx]+self.c_calc(y,x,1,self.dx[y,x])))
-                p_temp[(y-1)%self.Ny,(x+self.dx[y,x])%self.Nx] = np.min((1,p_temp[(y-1)%self.Ny,(x+self.dx[y,x])%self.Nx]+self.c_calc(y,x,-1,self.dx[y,x])))
-
+                p_temp[y,(x+self.dx[y,x])%self.Nx]   += self.c_calc(y,x,0,self.dx[y,x])
+                p_temp[(y+1)%self.Ny,(x+self.dx[y,x])%self.Nx] += self.c_calc(y,x,1,self.dx[y,x])
+                p_temp[(y-1)%self.Ny,(x+self.dx[y,x])%self.Nx] += self.c_calc(y,x,-1,self.dx[y,x])
+        
+        # Make sure p = 1 is the max value.
+        p_temp[p_temp>1]=1.0
+        
         return p_temp
-
-    #################
-    # Update height #
-    #################
-    def z_update(self):
-        """
-        Calculates and returns z, given e (pre-time-step) and ep (post-time-step) entrainment matrices.
-        """
-        z_temp = np.copy(self.z)
-        
-        # Calculate total change in entrainment
-        dp = np.sum(self.ep)-np.sum(self.e) 
-        
-        if dp<0:  #particle(s) detrained
-            # Add particles where e is True
-            inds = np.argwhere(self.e)
-            inds_dep = np.random.choice(len(inds),abs(dp),replace=False)
-            for ind in inds[inds_dep]:
-                z_temp[tuple(ind)]+=1
-                
-        elif dp>0:  #particle(s) entrained
-            # Remove particles where ep is True
-            inds = np.argwhere(self.ep)
-            inds_dep = np.random.choice(len(inds),abs(dp),replace=False)
-            for ind in inds[inds_dep]:
-                z_temp[tuple(ind)]+=-1
-            
-        # Sets any negative z to zero (although this should not happen...)
-        if (z_temp<0).any():
-            print("NEGATIVE Z!")
-        z_temp[z_temp<0] = 0
-        
-        return z_temp
 
     #########################################
     ####       Import/Export      ###########
