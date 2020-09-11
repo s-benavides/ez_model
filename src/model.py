@@ -24,7 +24,7 @@ class ez():
         self.c_0 = c_0
         self.skipmax = int(skipmax)
         if ((1/self.skipmax)>=np.sqrt((1/(3.*self.c_0))**2-1)):
-            print("c_0 is too large! Discreteness will have trouble resolving slope.")
+            print("c_0 is too large! Discreteness will have trouble resolving slope. Note: This warning may be outdated.")
         
         ####################
         ## INITIAL fields ##
@@ -76,7 +76,7 @@ class ez():
         """
         Calculates and returns c, given slope with neighbors and c_0.
         """
-        
+
         if self.dx[y,x]>0:
             s = (self.z[(y+dy)%self.Ny,(x+dx)%self.Nx]-self.z[y,x])/(self.dx[y,x])
         else:
@@ -137,7 +137,7 @@ class ez():
                 
                 
         ###########################################################
-        # (2) Deposite grains tha twere entrained last time-step: #
+        # (2) Deposite grains that were entrained last time-step: #
         ###########################################################
         # - We want a deposited grain to be depositied at the lowest point in the vicinity of the entrainment location
         inds = np.where(e_temp)
@@ -171,7 +171,7 @@ class ez():
             z_temp[indm]+=1
 
         #########################################################
-        # (3) Remove grains tha twere entrained this time-step: #
+        # (3) Remove grains that were entrained this time-step: #
         #########################################################
         # Now we take away wherever is entrained the current moment.
         z_temp[np.where(self.ep)]+=-1
@@ -190,16 +190,16 @@ class ez():
  
     def get_state(self):
         """
-        Get current state of model: returns [z,e,p,dx]
+        Get current state of model: returns [z,e,p,dx,t]
         """
-        return [self.z,self.e,self.p,self.dx]
+        return [self.z,self.e,self.p,self.dx,self.t]
     
     def set_state(self,data):
         """
-        Set current state of model: input must be in format [z,e,p,dx]. To be used with 'load_data'. 
+        Set current state of model: input must be in format [z,e,p,dx,t]. To be used with 'load_data'. 
         No need to use set_state unless you want to manually create a dataset.
         """
-        [self.z,self.e,self.p,self.dx] = data
+        [self.z,self.e,self.p,self.dx,self.t] = data
         return
     
     def load_data(self,name):
