@@ -76,7 +76,8 @@ class ez():
         """
         Calculates and returns c, given slope with neighbors and c_0.
         """
-
+        
+        # HERE
         if self.dx[y,x]>0:
             s = (self.z[(y+dy)%self.Ny,(x+dx)%self.Nx]-self.z[y,x])/(self.dx[y,x])
         else:
@@ -128,7 +129,7 @@ class ez():
         e_temp = np.copy(self.e)
         
         ###############################################
-        # (1) Grains that leave domain don't deposit: # 
+        # (1) Grains that leave domain don't deposit: #
         ###############################################
         if not periodic:
             for y,x in np.argwhere(self.e):
@@ -149,17 +150,45 @@ class ez():
                 maxx = (1+x)%self.Nx
             else:
                 minx = np.max((0,-1+x))
-                maxx = np.min((self.Nx-1,1+x))
+                maxx = np.min((self.Nx-1,1+x)) #HERE
 
             # Define "kernel" of where we're looking. Looks around +/- 1 in x and y for min value of z
-            tuples = np.array([[tuple(((-1+y)%self.Ny,minx)),tuple(((-1+y)%self.Ny,x)),tuple(((-1+y)%self.Ny,maxx))],
-                              [tuple((y,minx)),tuple((y,x)),tuple((y,maxx))],
-                              [tuple(((1+y)%self.Ny,minx)),tuple(((1+y)%self.Ny,x)),tuple(((1+y)%self.Ny,maxx))],
-                              ])
-            temp= np.array([[self.z[(-1+y)%self.Ny,minx],self.z[(-1+y)%self.Ny,x],self.z[(-1+y)%self.Ny,maxx]],
-                           [self.z[y,minx],self.z[y,x],self.z[y,maxx]],
-                           [self.z[(1+y)%self.Ny,minx],self.z[(1+y)%self.Ny,x],self.z[(1+y)%self.Ny,maxx]],
-                           ])
+            tuples = np.array([
+                [
+                    tuple(((-1+y)%self.Ny,minx)),
+                    tuple(((-1+y)%self.Ny,x)),
+                    tuple(((-1+y)%self.Ny,maxx))
+                ],
+                [
+                    tuple((y,minx)),
+                    tuple((y,x)),
+                    tuple((y,maxx))
+                ],
+                [
+                    tuple(((1+y)%self.Ny,minx)),
+                    tuple(((1+y)%self.Ny,x)),
+                    tuple(((1+y)%self.Ny,maxx))
+                ],
+                ])
+            temp= np.array([
+                [
+                    self.z[(-1+y)%self.Ny,minx],
+                    z_temp[(-1+y)%self.Ny,x],
+                    self.z[(-1+y)%self.Ny,maxx]
+                ],
+                [
+                    self.z[y,minx],
+                    z_temp[y,x],
+                    self.z[y,maxx]
+                ],
+                [
+                    self.z[(1+y)%self.Ny,minx],
+                    z_temp[(1+y)%self.Ny,x],
+                    self.z[(1+y)%self.Ny,maxx]
+                ],
+                ])
+
+            # HERE, if done right, I'll be able to undo this.
             # For periodic boundary conditions, the x location are randomly determined and y location is still minimum.
             if (periodic)&(x==0 or x==(self.Nx-1)):
                 col = np.random.randint(3, size=1)
@@ -265,7 +294,7 @@ class ez():
         Plots all fields:
         """
         import matplotlib.pyplot as plt
-        out = self.get_state() #[z,e,p,dx]
+        out = self.get_state()[:-1] #[z,e,p,dx,t]
         names = ['z','e','p','dx']
         for ii,field in enumerate(out):
             im=plt.imshow(field)
@@ -435,6 +464,7 @@ class set_q(ez):
         Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [dx,p,e,z,q_out].
         """
         
+        # print("1",np.sum(self.e),np.sum(self.ep),np.sum(self.z),self.q_out_calc(),np.sum(self.e)+np.sum(self.z)+self.q_out_calc())
         ## Recalculates dx randomly
         self.dx = self.dx_calc() 
         
@@ -447,9 +477,11 @@ class set_q(ez):
         ## Calculates q_out based on e[:,-skipmax:]
         self.q_out = self.q_out_calc() 
         
+        # print("4",np.sum(self.e),np.sum(self.ep),np.sum(self.z),self.q_out_calc(),np.sum(self.e)+np.sum(self.z)+self.q_out_calc())
         ## Update height, given e and ep.
         self.z = self.z_update() 
         
+        # print("5",np.sum(self.e),np.sum(self.ep),np.sum(self.z),self.q_out_calc(),np.sum(self.e)+np.sum(self.z)+self.q_out_calc())
         ## Copies and auxiliary entrainment matrix
         self.e = np.copy(self.ep)
         
@@ -457,16 +489,20 @@ class set_q(ez):
         # If q_in < 1, then we drop 1 bead every 1/q_in time steps.
         if self.q_in < 1:
             if self.t % int(1/self.q_in) == 0:
-                inds = np.random.choice(self.Ny,1,replace=False)
+                # inds = np.random.choice(self.Ny,1,replace=False)
+                inds = np.random.choice(np.where(~self.e[:,0])[0],self.q_in,replace=False) # Make sure we don't drop where grains already exist.
                 self.e[inds,0] = True
             else:
                 pass
         else:
-            inds = np.random.choice(self.Ny,int(self.q_in),replace=False)
+            # inds = np.random.choice(self.Ny,int(self.q_in),replace=False)
+            inds = np.random.choice(np.where(~self.e[:,0])[0],self.q_in,replace=False) # Make sure we don't drop where grains already exist.
             self.e[inds,0] = True
-        
+
         ## Add to time:
         self.t += 1
+
+        # print("End",np.sum(self.e),np.sum(self.ep),np.sum(self.z),self.q_out_calc(),np.sum(self.e)+np.sum(self.z)+self.q_out_calc(),"time = %s" % self.t)
 
     ###########################
     # Calculate probabilities #
@@ -482,9 +518,9 @@ class set_q(ez):
         # Periodic boundary conditions in y-direction!
         for y,x in np.argwhere(self.e):
             if self.dx[y,x] + x<=self.Nx-1:  # Not counting things that went outside
-                p_temp[y,(x+self.dx[y,x])%self.Nx]   += self.c_calc(y,x,0,self.dx[y,x])
-                p_temp[(y+1)%self.Ny,(x+self.dx[y,x])%self.Nx] += self.c_calc(y,x,1,self.dx[y,x])
-                p_temp[(y-1)%self.Ny,(x+self.dx[y,x])%self.Nx] += self.c_calc(y,x,-1,self.dx[y,x])
+                p_temp[y,x+self.dx[y,x]]   += self.c_calc(y,x,0,self.dx[y,x])
+                p_temp[(y+1)%self.Ny,x+self.dx[y,x]] += self.c_calc(y,x,1,self.dx[y,x])
+                p_temp[(y-1)%self.Ny,x+self.dx[y,x]] += self.c_calc(y,x,-1,self.dx[y,x])
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
