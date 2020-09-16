@@ -442,7 +442,6 @@ class set_q(ez):
         else:
             self.q_in = q_in
         
-        
         ####################
         ## INITIAL fields ##
         ####################
@@ -459,12 +458,11 @@ class set_q(ez):
     ####################
     # Take a time step #
     ####################
-    def step(self):     
+    def step(self,dbg=False):     
         """
         Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [dx,p,e,z,q_out].
         """
         
-        # print("1",np.sum(self.e),np.sum(self.ep),np.sum(self.z),self.q_out_calc(),np.sum(self.e)+np.sum(self.z)+self.q_out_calc())
         ## Recalculates dx randomly
         self.dx = self.dx_calc() 
         
@@ -477,11 +475,9 @@ class set_q(ez):
         ## Calculates q_out based on e[:,-skipmax:]
         self.q_out = self.q_out_calc() 
         
-        # print("4",np.sum(self.e),np.sum(self.ep),np.sum(self.z),self.q_out_calc(),np.sum(self.e)+np.sum(self.z)+self.q_out_calc())
         ## Update height, given e and ep.
         self.z = self.z_update() 
         
-        # print("5",np.sum(self.e),np.sum(self.ep),np.sum(self.z),self.q_out_calc(),np.sum(self.e)+np.sum(self.z)+self.q_out_calc())
         ## Copies and auxiliary entrainment matrix
         self.e = np.copy(self.ep)
         
@@ -490,20 +486,20 @@ class set_q(ez):
         if self.q_in < 1:
             if self.t % int(1/self.q_in) == 0:
                 # inds = np.random.choice(self.Ny,1,replace=False)
-                inds = np.random.choice(np.where(~self.e[:,0])[0],self.q_in,replace=False) # Make sure we don't drop where grains already exist.
+                inds = np.random.choice(np.where(~self.e[:,0])[0],1,replace=False) # Make sure we don't drop where grains already exist.
                 self.e[inds,0] = True
             else:
                 pass
         else:
             # inds = np.random.choice(self.Ny,int(self.q_in),replace=False)
-            inds = np.random.choice(np.where(~self.e[:,0])[0],self.q_in,replace=False) # Make sure we don't drop where grains already exist.
+            inds = np.random.choice(np.where(~self.e[:,0])[0],int(self.q_in),replace=False) # Make sure we don't drop where grains already exist.
             self.e[inds,0] = True
 
         ## Add to time:
         self.t += 1
 
-        # print("End",np.sum(self.e),np.sum(self.ep),np.sum(self.z),self.q_out_calc(),np.sum(self.e)+np.sum(self.z)+self.q_out_calc(),"time = %s" % self.t)
-
+        return
+        
     ###########################
     # Calculate probabilities #
     ###########################
@@ -517,7 +513,7 @@ class set_q(ez):
         # Define probabilities of entrainment based on previous e and c matrix.
         # Periodic boundary conditions in y-direction!
         for y,x in np.argwhere(self.e):
-            if self.dx[y,x] + x<=self.Nx-1:  # Not counting things that went outside
+            if (self.dx[y,x] + x)<=self.Nx-1:  # Not counting things that went outside
                 p_temp[y,x+self.dx[y,x]]   += self.c_calc(y,x,0,self.dx[y,x])
                 p_temp[(y+1)%self.Ny,x+self.dx[y,x]] += self.c_calc(y,x,1,self.dx[y,x])
                 p_temp[(y-1)%self.Ny,x+self.dx[y,x]] += self.c_calc(y,x,-1,self.dx[y,x])
