@@ -128,82 +128,155 @@ class ez():
         z_temp = np.copy(self.z)
         e_temp = np.copy(self.e)
         
-        ###############################################
-        # (1) Grains that leave domain don't deposit: #
-        ###############################################
-        if not periodic:
-            for y,x in np.argwhere(self.e):
-                if self.dx[y,x] + x>self.Nx-1:
-                    e_temp[y,x] = False # Change e_temp so these don't appear in the next count, step (2)     
+                # Calculate total change in entrainment
+        dp = np.sum(self.ep)+self.q_out-np.sum(self.e) 
+        
+        if dp<0:  #particle(s) detrained
+            # Add particles where e is True
+            inds = np.argwhere(self.e)
+            inds_dep = np.random.choice(len(inds),abs(dp),replace=False)
+            for ind in inds[inds_dep]:
+                y,x = ind
+                if periodic:
+                    minx = (-1+x)%self.Nx
+                    maxx = (1+x)%self.Nx
+                else:
+                    minx = np.max((0,-1+x))
+                    maxx = np.min((self.Nx-1,1+x)) #HERE
+
+                # Define "kernel" of where we're looking. Looks around +/- 1 in x and y for min value of z
+                tuples = np.array([
+                    [
+                        tuple(((-1+y)%self.Ny,minx)),
+                        tuple(((-1+y)%self.Ny,x)),
+                        tuple(((-1+y)%self.Ny,maxx))
+                    ],
+                    [
+                        tuple((y,minx)),
+                        tuple((y,x)),
+                        tuple((y,maxx))
+                    ],
+                    [
+                        tuple(((1+y)%self.Ny,minx)),
+                        tuple(((1+y)%self.Ny,x)),
+                        tuple(((1+y)%self.Ny,maxx))
+                    ],
+                    ])
+                temp= np.array([
+                    [
+                        z_temp[(-1+y)%self.Ny,minx],
+                        z_temp[(-1+y)%self.Ny,x],
+                        z_temp[(-1+y)%self.Ny,maxx]
+                    ],
+                    [
+                        z_temp[y,minx],
+                        z_temp[y,x],
+                        z_temp[y,maxx]
+                    ],
+                    [
+                        z_temp[(1+y)%self.Ny,minx],
+                        z_temp[(1+y)%self.Ny,x],
+                        z_temp[(1+y)%self.Ny,maxx]
+                    ],
+                    ])
+
+                # HERE, if done right, I'll be able to undo this.
+                # For periodic boundary conditions, the x location are randomly determined and y location is still minimum.
+                if (periodic)&(x==0 or x==(self.Nx-1)):
+                    col = np.random.randint(3, size=1)
+                    row = np.argmin(temp[:,col])
+                    indm = tuple(tuples[row,col[0]])
+                else:
+                    indm = np.unravel_index(np.argmin(temp, axis=None), temp.shape)
+                    indm = tuple(tuples[indm])
+                z_temp[indm]+=1
+### OLD VERSION
+#                 if self.dx[ind[0],ind[1]] + ind[1]<=self.Nx-1:  # Not counting things that went outside
+#                     z_temp[tuple(ind)]+=1
+                
+        elif dp>0:  #particle(s) entrained
+            # Remove particles where ep is True
+            inds = np.argwhere(self.ep)
+            inds_dep = np.random.choice(len(inds),abs(dp),replace=False)
+            for ind in inds[inds_dep]:
+                z_temp[tuple(ind)]-=1
+                
+#         ###############################################
+#         # (1) Grains that leave domain don't deposit: #
+#         ###############################################
+#         if not periodic:
+#             for y,x in np.argwhere(self.e):
+#                 if self.dx[y,x] + x>self.Nx-1:
+#                     e_temp[y,x] = False # Change e_temp so these don't appear in the next count, step (2)     
                 
                 
-        ###########################################################
-        # (2) Deposite grains that were entrained last time-step: #
-        ###########################################################
-        # - We want a deposited grain to be depositied at the lowest point in the vicinity of the entrainment location
-        inds = np.where(e_temp)
-        inds = np.transpose(inds)
-        for ind in inds:
-            y,x = ind
-            if periodic:
-                minx = (-1+x)%self.Nx
-                maxx = (1+x)%self.Nx
-            else:
-                minx = np.max((0,-1+x))
-                maxx = np.min((self.Nx-1,1+x)) #HERE
+#         ###########################################################
+#         # (2) Deposite grains that were entrained last time-step: #
+#         ###########################################################
+#         # - We want a deposited grain to be depositied at the lowest point in the vicinity of the entrainment location
+#         inds = np.where(e_temp)
+#         inds = np.transpose(inds)
+#         for ind in inds:
+#             y,x = ind
+#             if periodic:
+#                 minx = (-1+x)%self.Nx
+#                 maxx = (1+x)%self.Nx
+#             else:
+#                 minx = np.max((0,-1+x))
+#                 maxx = np.min((self.Nx-1,1+x)) #HERE
 
-            # Define "kernel" of where we're looking. Looks around +/- 1 in x and y for min value of z
-            tuples = np.array([
-                [
-                    tuple(((-1+y)%self.Ny,minx)),
-                    tuple(((-1+y)%self.Ny,x)),
-                    tuple(((-1+y)%self.Ny,maxx))
-                ],
-                [
-                    tuple((y,minx)),
-                    tuple((y,x)),
-                    tuple((y,maxx))
-                ],
-                [
-                    tuple(((1+y)%self.Ny,minx)),
-                    tuple(((1+y)%self.Ny,x)),
-                    tuple(((1+y)%self.Ny,maxx))
-                ],
-                ])
-            temp= np.array([
-                [
-                    self.z[(-1+y)%self.Ny,minx],
-                    z_temp[(-1+y)%self.Ny,x],
-                    self.z[(-1+y)%self.Ny,maxx]
-                ],
-                [
-                    self.z[y,minx],
-                    z_temp[y,x],
-                    self.z[y,maxx]
-                ],
-                [
-                    self.z[(1+y)%self.Ny,minx],
-                    z_temp[(1+y)%self.Ny,x],
-                    self.z[(1+y)%self.Ny,maxx]
-                ],
-                ])
+#             # Define "kernel" of where we're looking. Looks around +/- 1 in x and y for min value of z
+#             tuples = np.array([
+#                 [
+#                     tuple(((-1+y)%self.Ny,minx)),
+#                     tuple(((-1+y)%self.Ny,x)),
+#                     tuple(((-1+y)%self.Ny,maxx))
+#                 ],
+#                 [
+#                     tuple((y,minx)),
+#                     tuple((y,x)),
+#                     tuple((y,maxx))
+#                 ],
+#                 [
+#                     tuple(((1+y)%self.Ny,minx)),
+#                     tuple(((1+y)%self.Ny,x)),
+#                     tuple(((1+y)%self.Ny,maxx))
+#                 ],
+#                 ])
+#             temp= np.array([
+#                 [
+#                     z_temp[(-1+y)%self.Ny,minx],
+#                     z_temp[(-1+y)%self.Ny,x],
+#                     z_temp[(-1+y)%self.Ny,maxx]
+#                 ],
+#                 [
+#                     z_temp[y,minx],
+#                     z_temp[y,x],
+#                     z_temp[y,maxx]
+#                 ],
+#                 [
+#                     z_temp[(1+y)%self.Ny,minx],
+#                     z_temp[(1+y)%self.Ny,x],
+#                     z_temp[(1+y)%self.Ny,maxx]
+#                 ],
+#                 ])
 
-            # HERE, if done right, I'll be able to undo this.
-            # For periodic boundary conditions, the x location are randomly determined and y location is still minimum.
-            if (periodic)&(x==0 or x==(self.Nx-1)):
-                col = np.random.randint(3, size=1)
-                row = np.argmin(temp[:,col])
-                indm = tuple(tuples[row,col[0]])
-            else:
-                indm = np.unravel_index(np.argmin(temp, axis=None), temp.shape)
-                indm = tuple(tuples[indm])
-            z_temp[indm]+=1
+#             # HERE, if done right, I'll be able to undo this.
+#             # For periodic boundary conditions, the x location are randomly determined and y location is still minimum.
+#             if (periodic)&(x==0 or x==(self.Nx-1)):
+#                 col = np.random.randint(3, size=1)
+#                 row = np.argmin(temp[:,col])
+#                 indm = tuple(tuples[row,col[0]])
+#             else:
+#                 indm = np.unravel_index(np.argmin(temp, axis=None), temp.shape)
+#                 indm = tuple(tuples[indm])
+#             z_temp[indm]+=1
 
-        #########################################################
-        # (3) Remove grains that were entrained this time-step: #
-        #########################################################
-        # Now we take away wherever is entrained the current moment.
-        z_temp[np.where(self.ep)]+=-1
+#         #########################################################
+#         # (3) Remove grains that were entrained this time-step: #
+#         #########################################################
+#         # Now we take away wherever is entrained the current moment.
+#         z_temp[np.where(self.ep)]+=-1
     
         # Sets any negative z to zero (although this should not happen...)
         if (z_temp<0).any():
@@ -450,6 +523,7 @@ class set_q(ez):
         self.e[inds,0] = True
         ## Flux out:
         self.q_out = int(0)
+        self.q_tot_out = int(0)
 
     #########################################
     ####       Dynamics and Calcs      ######
@@ -458,10 +532,13 @@ class set_q(ez):
     ####################
     # Take a time step #
     ####################
-    def step(self,dbg=False):     
+    def step(self,bal=False):     
         """
         Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [dx,p,e,z,q_out].
         """
+        if bal:
+            self.q_tot_out += self.q_out
+            temp = np.sum(self.e)+np.sum(self.z)+self.q_tot_out
         
         ## Recalculates dx randomly
         self.dx = self.dx_calc() 
@@ -498,7 +575,10 @@ class set_q(ez):
         ## Add to time:
         self.t += 1
 
-        return
+        if bal:
+            return temp
+        else:
+            return
         
     ###########################
     # Calculate probabilities #
