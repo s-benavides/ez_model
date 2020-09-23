@@ -565,7 +565,7 @@ class set_q(ez):
                 # inds = np.random.choice(self.Ny,1,replace=False)
 #                 inds = np.random.choice(np.where(~self.e[:,0])[0],1,replace=False) # Make sure we don't drop where grains already exist.
 #                 self.e[inds,0] = True
-                indlist = np.transpose(np.where(~self.e[:,:5]))
+                indlist = np.transpose(np.where(~self.e[:,1:5]))
                 indn = np.random.choice(len(indlist),1,replace=False)
                 ind = np.transpose(indlist[indn])
                 self.e[tuple(ind)]=True
@@ -575,7 +575,7 @@ class set_q(ez):
             # inds = np.random.choice(self.Ny,int(self.q_in),replace=False)
 #             inds = np.random.choice(np.where(~self.e[:,0])[0],int(self.q_in),replace=False) # Make sure we don't drop where grains already exist.
 #             self.e[inds,0] = True
-            indlist = np.transpose(np.where(~self.e[:,:5]))
+            indlist = np.transpose(np.where(~self.e[:,1:5]))
             indn = np.random.choice(len(indlist),int(self.q_in),replace=False)
             ind = np.transpose(indlist[indn])
             self.e[tuple(ind)]=True
