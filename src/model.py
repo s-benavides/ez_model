@@ -129,10 +129,10 @@ class ez():
         z_temp = np.copy(self.z)
 #         e_temp = np.copy(self.e)
         
-                # Calculate total change in entrainment
+        # Calculate total change in entrainment
         dp = np.sum(self.ep)+self.q_out-np.sum(self.e)-q_in_temp
         
-        if dp<0:  #particle(s) detrained
+        if dp<0:  #particle(s) deposited
             # Add particles where e is True
             inds = np.argwhere(self.e)
             inds_dep = np.random.choice(len(inds),abs(dp),replace=False)
@@ -191,9 +191,9 @@ class ez():
                     indm = np.unravel_index(np.argmin(temp, axis=None), temp.shape)
                     indm = tuple(tuples[indm])
                 z_temp[indm]+=1
-### OLD VERSION
-#                 if self.dx[ind[0],ind[1]] + ind[1]<=self.Nx-1:  # Not counting things that went outside
-#                     z_temp[tuple(ind)]+=1
+# ### OLD VERSION
+# #                 if self.dx[ind[0],ind[1]] + ind[1]<=self.Nx-1:  # Not counting things that went outside
+# #                     z_temp[tuple(ind)]+=1
                 
         elif dp>0:  #particle(s) entrained
             # Remove particles where ep is True
@@ -207,7 +207,7 @@ class ez():
 #         ###############################################
 #         if not periodic:
 #             for y,x in np.argwhere(self.e):
-#                 if self.dx[y,x] + x>self.Nx-1:
+#                 if ((self.dx[y,x] + x>self.Nx-1)&(self.z[y,x]>self.bed_h)): # Only grains that are above the fixed bed_h barrier leave the domain
 #                     e_temp[y,x] = False # Change e_temp so these don't appear in the next count, step (2)     
                 
                 
@@ -285,9 +285,10 @@ class ez():
             print(np.where(z_temp<0))
         z_temp[z_temp<0] = 0
         
-        z_diff = np.sum(z_temp[:,-1])-self.bed_h*self.Ny
-        self.q_out += z_diff
-        z_temp[:,-1]= self.bed_h # make it so that the final row has exactly bed_h grains in the bed.
+#         if np.sum(z_temp[:,-1])>self.bed_h*self.Ny:
+#             z_diff = np.sum(z_temp[:,-1])-self.bed_h*self.Ny
+#             self.q_out += z_diff
+#             z_temp[:,-1]= self.bed_h # make it so that the final row has exactly bed_h grains in the bed.
         
         return z_temp
     
@@ -622,6 +623,10 @@ class set_q(ez):
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
         
+        # Entrain grains that are standing above the 'barrier':
+        inds = np.where(self.z[:,-1]>self.bed_h)[0]
+        p_temp[inds,-1]=1.0
+        
         return p_temp
 
     
@@ -634,8 +639,10 @@ class set_q(ez):
         """
         q_out_temp = int(0)
         for y,x in np.argwhere(self.e):
-            if self.dx[y,x] + x>self.Nx-1:
+            if ((self.dx[y,x] + x>self.Nx-1)&(self.z[y,x]>self.bed_h)): # Only grains that are above the fixed bed_h barrier leave the domain
                 q_out_temp += 1
+#             elif ((self.dx[y,x] + x>self.Nx-1)&(self.z[y,x]<=self.bed_h)):
+#                 print("Blocked by boundary, location = [%s,%s], height = %s" % (y,x,self.z[y,x]))
         return q_out_temp    
 
 
