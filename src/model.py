@@ -29,8 +29,9 @@ class ez():
         ####################
         ## INITIAL fields ##
         ####################
-        ## Height. Start with z = 100 everywhere. (to avoid negative values of z)
-        self.z = 100*np.ones((Ny,Nx),dtype=int)
+        ## Height. Start with z = bed_h everywhere. (to avoid negative values of z)
+        self.bed_h = 100
+        self.z = self.bed_h*np.ones((Ny,Nx),dtype=int)
         ## Entrained or not
         # Start with none entrained
         self.e = np.zeros((Ny,Nx),dtype=bool)
@@ -121,15 +122,15 @@ class ez():
     #################
     # Update height #
     #################
-    def z_update(self,periodic=False):
+    def z_update(self,periodic=False,q_in_temp = 0):
         """
         Calculates and returns z, given e (pre-time-step) and ep (post-time-step) entrainment matrices. Does so in a way that conserves grains (unles they leave the domain).
         """
         z_temp = np.copy(self.z)
-        e_temp = np.copy(self.e)
+#         e_temp = np.copy(self.e)
         
                 # Calculate total change in entrainment
-        dp = np.sum(self.ep)+self.q_out-np.sum(self.e) 
+        dp = np.sum(self.ep)+self.q_out-np.sum(self.e)-q_in_temp
         
         if dp<0:  #particle(s) detrained
             # Add particles where e is True
@@ -284,6 +285,10 @@ class ez():
             print(np.where(z_temp<0))
         z_temp[z_temp<0] = 0
         
+        z_diff = np.sum(z_temp[:,-1])-self.bed_h*self.Ny
+        self.q_out += z_diff
+        z_temp[:,-1]= self.bed_h # make it so that the final row has exactly bed_h grains in the bed.
+        
         return z_temp
     
     #########################################
@@ -336,14 +341,14 @@ class ez():
         ax1.tick_params(axis='both',bottom=False,left=False)
         ax1.set_title("Entrainment Field")
         #
-        im = ax2.imshow(self.z[:,2:]-100,vmin=0,vmax=np.max(self.z[:,2:]-100),cmap=cm.Greens,aspect=self.Nx/(5*self.Ny))
+        im = ax2.imshow(self.z[:,2:]-self.bed_h,vmin=0,vmax=np.max(self.z[:,2:]-self.bed_h),cmap=cm.Greens,aspect=self.Nx/(5*self.Ny))
         ax2.set_title("Height Field")
         fig.colorbar(im,ax=ax2,orientation='horizontal')
         ax2.set_xticklabels([])
         ax2.set_yticklabels([])
         ax2.tick_params(axis='both',bottom=False,left=False)
         #
-        meanz = np.mean(self.z[:,2:]-100,axis=0)
+        meanz = np.mean(self.z[:,2:]-self.bed_h,axis=0)
         ax3.plot(meanz,'.k')
         # x = np.arange(len(meanz))
         # ax3.plot(meanz[0]-np.sqrt(1/(9.*self.c_0)-1)*x,'--r')
@@ -406,7 +411,7 @@ class ez():
         dt_frame = np.max((int((t_steps)/(fps*duration)),1))
         
         ### Make the data:
-        zs = [np.mean(self.z[:,2:]-100,axis=0)]
+        zs = [np.mean(self.z[:,2:]-self.bed_h,axis=0)]
         es = [self.e]
         qs = [self.bed_activity()]
         dt = 0
@@ -416,7 +421,7 @@ class ez():
             dt+=1 
             if dt % dt_frame ==0:
                 dt = 0
-                zs.append(np.mean(self.z[:,2:]-100,axis=0))
+                zs.append(np.mean(self.z[:,2:]-self.bed_h,axis=0))
                 es.append(self.e)    
                 
         zs=np.array(zs)
@@ -519,8 +524,11 @@ class set_q(ez):
         ## INITIAL fields ##
         ####################
         # We drop q_in number of grains (randomly) at the beginning.
-        inds = np.random.choice(self.Ny,max(int(q_in),1),replace=False)
-        self.e[inds,0] = True
+        indsfull = np.transpose(np.where(~self.e))
+        indlist = indsfull[(indsfull[:,1]>0)&(indsfull[:,1]<6)]
+        indn = np.random.choice(len(indlist),max(int(self.q_in),1),replace=False)
+        ind = np.transpose(indlist[indn])
+        self.e[tuple(ind)]=True
         ## Flux out:
         self.q_out = int(0)
         self.q_tot_out = int(0)
@@ -552,33 +560,38 @@ class set_q(ez):
         ## Calculates q_out based on e[:,-skipmax:]
         self.q_out = self.q_out_calc() 
         
-        ## Update height, given e and ep.
-        self.z = self.z_update() 
-        
-        ## Copies and auxiliary entrainment matrix
-        self.e = np.copy(self.ep)
-        
         ## We drop q_in number of grains (randomly) at the head of the flume.
         # If q_in < 1, then we drop 1 bead every 1/q_in time steps.
+        self.q_in_temp = 0
         if self.q_in < 1:
             if self.t % int(1/self.q_in) == 0:
                 # inds = np.random.choice(self.Ny,1,replace=False)
 #                 inds = np.random.choice(np.where(~self.e[:,0])[0],1,replace=False) # Make sure we don't drop where grains already exist.
 #                 self.e[inds,0] = True
-                indlist = np.transpose(np.where(~self.e[:,1:5]))
+                indsfull = np.transpose(np.where(~self.ep))
+                indlist = indsfull[(indsfull[:,1]>0)&(indsfull[:,1]<6)]
                 indn = np.random.choice(len(indlist),1,replace=False)
                 ind = np.transpose(indlist[indn])
-                self.e[tuple(ind)]=True
+                self.ep[tuple(ind)]=True
+                self.q_in_temp = 1
             else:
                 pass
         else:
             # inds = np.random.choice(self.Ny,int(self.q_in),replace=False)
 #             inds = np.random.choice(np.where(~self.e[:,0])[0],int(self.q_in),replace=False) # Make sure we don't drop where grains already exist.
 #             self.e[inds,0] = True
-            indlist = np.transpose(np.where(~self.e[:,1:5]))
-            indn = np.random.choice(len(indlist),int(self.q_in),replace=False)
-            ind = np.transpose(indlist[indn])
-            self.e[tuple(ind)]=True
+                indsfull = np.transpose(np.where(~self.ep))
+                indlist = indsfull[(indsfull[:,1]>0)&(indsfull[:,1]<6)]
+                indn = np.random.choice(len(indlist),int(self.q_in),replace=False)
+                ind = np.transpose(indlist[indn])
+                self.ep[tuple(ind)]=True
+                self.q_in_temp = int(self.q_in)
+        
+        ## Update height, given e and ep.
+        self.z = self.z_update(q_in_temp = self.q_in_temp) 
+        
+        ## Copies and auxiliary entrainment matrix
+        self.e = np.copy(self.ep)
 
         ## Add to time:
         self.t += 1
