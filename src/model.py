@@ -73,14 +73,13 @@ class ez():
     # Calculating collision likelyhood based on z.#
     ###############################################
     # c_0     = collision coefficient at zero slope.
-    def c_calc(self,y,x,dy,dx):
+    def c_calc(self,z_t,y,x,dy,dx):
         """
         Calculates and returns c, given slope with neighbors and c_0.
-        """
+        """    
         
-        # HERE
         if self.dx[y,x]>0:
-            s = (self.z[(y+dy)%self.Ny,(x+dx)%self.Nx]-self.z[y,x])/(self.dx[y,x])
+            s = (z_t[(y+dy)%self.Ny,x+dx]-z_t[y,x])/(self.dx[y,x])
         else:
             s =0.0
             
@@ -126,11 +125,16 @@ class ez():
         """
         Calculates and returns z, given e (pre-time-step) and ep (post-time-step) entrainment matrices. Does so in a way that conserves grains (unles they leave the domain).
         """
-        z_temp = np.copy(self.z)
-#         e_temp = np.copy(self.e)
-        
-        # Calculate total change in entrainment
-        dp = np.sum(self.ep)+self.q_out-np.sum(self.e)-q_in_temp
+        if periodic:
+            z_temp = self.ghost_z()
+            
+            # Calculate total change in entrainment
+            dp = np.sum(self.ep)-np.sum(self.e)
+        else:
+            z_temp = np.copy(self.z)
+            
+            # Calculate total change in entrainment
+            dp = np.sum(self.ep)+self.q_out-np.sum(self.e)-q_in_temp
         
         if dp<0:  #particle(s) deposited
             # Add particles where e is True
@@ -139,11 +143,12 @@ class ez():
             for ind in inds[inds_dep]:
                 y,x = ind
                 if periodic:
-                    minx = (-1+x)%self.Nx
-                    maxx = (1+x)%self.Nx
+                    x+=1 # Ghost cells have an extra column to the left
+                    minx = x-1
+                    maxx = x+1
                 else:
                     minx = np.max((0,-1+x))
-                    maxx = np.min((self.Nx-1,1+x)) #HERE
+                    maxx = np.min((self.Nx-1,1+x))
 
                 # Define "kernel" of where we're looking. Looks around +/- 1 in x and y for min value of z
                 tuples = np.array([
@@ -183,114 +188,60 @@ class ez():
 
                 # HERE, if done right, I'll be able to undo this.
                 # For periodic boundary conditions, the x location are randomly determined and y location is still minimum.
-                if (periodic)&(x==0 or x==(self.Nx-1)):
-                    col = np.random.randint(3, size=1)
-                    row = np.argmin(temp[:,col])
-                    indm = tuple(tuples[row,col[0]])
+                if periodic:
+                    indm = np.unravel_index(np.argmin(temp, axis=None), temp.shape)
+                    y,x = tuple(tuples[indm])
+                    x+=-1 # Shifting x-axis so that 0 corresponds to first column of real z
+                    x = x%self.Nx # Periodic
+                    x += 1 # But adding 1 back so that in the end we take [:,1:Nx+1]
+                    indm = tuple([y,x])
                 else:
                     indm = np.unravel_index(np.argmin(temp, axis=None), temp.shape)
                     indm = tuple(tuples[indm])
                 z_temp[indm]+=1
-# ### OLD VERSION
-# #                 if self.dx[ind[0],ind[1]] + ind[1]<=self.Nx-1:  # Not counting things that went outside
-# #                     z_temp[tuple(ind)]+=1
                 
         elif dp>0:  #particle(s) entrained
             # Remove particles where ep is True
             inds = np.argwhere(self.ep)
             inds_dep = np.random.choice(len(inds),abs(dp),replace=False)
             for ind in inds[inds_dep]:
-                z_temp[tuple(ind)]-=1
+                z_temp[:,1:][tuple(ind)]-=1 # Shifting so that the right places are taken away
                 
-#         ###############################################
-#         # (1) Grains that leave domain don't deposit: #
-#         ###############################################
-#         if not periodic:
-#             for y,x in np.argwhere(self.e):
-#                 if ((self.dx[y,x] + x>self.Nx-1)&(self.z[y,x]>self.bed_h)): # Only grains that are above the fixed bed_h barrier leave the domain
-#                     e_temp[y,x] = False # Change e_temp so these don't appear in the next count, step (2)     
-                
-                
-#         ###########################################################
-#         # (2) Deposite grains that were entrained last time-step: #
-#         ###########################################################
-#         # - We want a deposited grain to be depositied at the lowest point in the vicinity of the entrainment location
-#         inds = np.where(e_temp)
-#         inds = np.transpose(inds)
-#         for ind in inds:
-#             y,x = ind
-#             if periodic:
-#                 minx = (-1+x)%self.Nx
-#                 maxx = (1+x)%self.Nx
-#             else:
-#                 minx = np.max((0,-1+x))
-#                 maxx = np.min((self.Nx-1,1+x)) #HERE
-
-#             # Define "kernel" of where we're looking. Looks around +/- 1 in x and y for min value of z
-#             tuples = np.array([
-#                 [
-#                     tuple(((-1+y)%self.Ny,minx)),
-#                     tuple(((-1+y)%self.Ny,x)),
-#                     tuple(((-1+y)%self.Ny,maxx))
-#                 ],
-#                 [
-#                     tuple((y,minx)),
-#                     tuple((y,x)),
-#                     tuple((y,maxx))
-#                 ],
-#                 [
-#                     tuple(((1+y)%self.Ny,minx)),
-#                     tuple(((1+y)%self.Ny,x)),
-#                     tuple(((1+y)%self.Ny,maxx))
-#                 ],
-#                 ])
-#             temp= np.array([
-#                 [
-#                     z_temp[(-1+y)%self.Ny,minx],
-#                     z_temp[(-1+y)%self.Ny,x],
-#                     z_temp[(-1+y)%self.Ny,maxx]
-#                 ],
-#                 [
-#                     z_temp[y,minx],
-#                     z_temp[y,x],
-#                     z_temp[y,maxx]
-#                 ],
-#                 [
-#                     z_temp[(1+y)%self.Ny,minx],
-#                     z_temp[(1+y)%self.Ny,x],
-#                     z_temp[(1+y)%self.Ny,maxx]
-#                 ],
-#                 ])
-
-#             # HERE, if done right, I'll be able to undo this.
-#             # For periodic boundary conditions, the x location are randomly determined and y location is still minimum.
-#             if (periodic)&(x==0 or x==(self.Nx-1)):
-#                 col = np.random.randint(3, size=1)
-#                 row = np.argmin(temp[:,col])
-#                 indm = tuple(tuples[row,col[0]])
-#             else:
-#                 indm = np.unravel_index(np.argmin(temp, axis=None), temp.shape)
-#                 indm = tuple(tuples[indm])
-#             z_temp[indm]+=1
-
-#         #########################################################
-#         # (3) Remove grains that were entrained this time-step: #
-#         #########################################################
-#         # Now we take away wherever is entrained the current moment.
-#         z_temp[np.where(self.ep)]+=-1
-    
         # Sets any negative z to zero (although this should not happen...)
         if (z_temp<0).any():
             print("NEGATIVE Z!")
             print(np.where(z_temp<0))
         z_temp[z_temp<0] = 0
         
-#         if np.sum(z_temp[:,-1])>self.bed_h*self.Ny:
-#             z_diff = np.sum(z_temp[:,-1])-self.bed_h*self.Ny
-#             self.q_out += z_diff
-#             z_temp[:,-1]= self.bed_h # make it so that the final row has exactly bed_h grains in the bed.
+        z_temp = z_temp[:,1:self.Nx+1]
         
         return z_temp
+    
+    def ghost_z(self):
+        # How long do we extend for?
+        maxdx = np.max(np.arange(self.Nx)+self.dx) - self.Nx + 1
+
+        # Calculate the bed slope:
+        xs = np.arange(self.Nx+maxdx+1)
+        bed = np.mean(self.z,axis=0)
+        
+        # The true bed is now from 1 to Nx in bed_f
+        m,b = np.polyfit(xs[(1<=xs)&(xs<=self.Nx)],bed,1)
+        bed_f = np.array(np.round(m*xs+b),dtype=int)
+
+        # Calculate the pertrusion from the fit
+        z_diff = self.z[:,:maxdx]-bed_f[1:maxdx+1]
+        z_diff_t = self.z[:,-1]-bed_f[self.Nx]
+
+        # Add the extra space
+        z_t = np.hstack((np.zeros((self.Ny,1),dtype=int),np.copy(self.z),np.zeros((self.Ny,maxdx),dtype=int)))
+
+        # Add the baseline extrapolated slope + the difference at each point
+        z_t[:,self.Nx+1:] = bed_f[self.Nx+1:]+z_diff
+        z_t[:,0] = bed_f[0]+z_diff_t
+        
+        return z_t
+            
     
     #########################################
     ####       Import/Export      ###########
@@ -566,9 +517,6 @@ class set_q(ez):
         self.q_in_temp = 0
         if self.q_in < 1:
             if self.t % int(1/self.q_in) == 0:
-                # inds = np.random.choice(self.Ny,1,replace=False)
-#                 inds = np.random.choice(np.where(~self.e[:,0])[0],1,replace=False) # Make sure we don't drop where grains already exist.
-#                 self.e[inds,0] = True
                 indsfull = np.transpose(np.where(~self.ep))
                 indlist = indsfull[(indsfull[:,1]>0)&(indsfull[:,1]<6)]
                 indn = np.random.choice(len(indlist),1,replace=False)
@@ -578,9 +526,6 @@ class set_q(ez):
             else:
                 pass
         else:
-            # inds = np.random.choice(self.Ny,int(self.q_in),replace=False)
-#             inds = np.random.choice(np.where(~self.e[:,0])[0],int(self.q_in),replace=False) # Make sure we don't drop where grains already exist.
-#             self.e[inds,0] = True
                 indsfull = np.transpose(np.where(~self.ep))
                 indlist = indsfull[(indsfull[:,1]>0)&(indsfull[:,1]<6)]
                 indn = np.random.choice(len(indlist),int(self.q_in),replace=False)
@@ -616,9 +561,9 @@ class set_q(ez):
         # Periodic boundary conditions in y-direction!
         for y,x in np.argwhere(self.e):
             if (self.dx[y,x] + x)<=self.Nx-1:  # Not counting things that went outside
-                p_temp[y,x+self.dx[y,x]]   += self.c_calc(y,x,0,self.dx[y,x])
-                p_temp[(y+1)%self.Ny,x+self.dx[y,x]] += self.c_calc(y,x,1,self.dx[y,x])
-                p_temp[(y-1)%self.Ny,x+self.dx[y,x]] += self.c_calc(y,x,-1,self.dx[y,x])
+                p_temp[y,x+self.dx[y,x]]   += self.c_calc(self.z,y,x,0,self.dx[y,x])
+                p_temp[(y+1)%self.Ny,x+self.dx[y,x]] += self.c_calc(self.z,y,x,1,self.dx[y,x])
+                p_temp[(y-1)%self.Ny,x+self.dx[y,x]] += self.c_calc(self.z,y,x,-1,self.dx[y,x])
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
@@ -641,8 +586,6 @@ class set_q(ez):
         for y,x in np.argwhere(self.e):
             if ((self.dx[y,x] + x>self.Nx-1)&(self.z[y,x]>self.bed_h)): # Only grains that are above the fixed bed_h barrier leave the domain
                 q_out_temp += 1
-#             elif ((self.dx[y,x] + x>self.Nx-1)&(self.z[y,x]<=self.bed_h)):
-#                 print("Blocked by boundary, location = [%s,%s], height = %s" % (y,x,self.z[y,x]))
         return q_out_temp    
 
 
@@ -685,16 +628,16 @@ class set_f(ez):
     ####################
     # Take a time step #
     ####################
-    def step(self):     
+    def step(self,bal=False):     
         """
-        Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [dx,p,e,z].
+        Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [dx,p,e,z,q_out].
         """
-
+        
         ## Recalculates dx randomly
         self.dx = self.dx_calc() 
 
         ## Calculates probabilities, given c, e, and dx
-        self.p = self.p_calc() 
+        self.p = self.p_calc()
 
         ## Update new (auxiliary) entrainment matrix, given only p
         self.ep = self.e_update() 
@@ -706,7 +649,12 @@ class set_f(ez):
         self.e = np.copy(self.ep)    
 
         ## Add to time:
-        self.t += 1
+        self.t += 1        
+        
+        if bal:
+            return np.sum(self.e)+np.sum(self.z)
+        else:
+            return
 
     ###########################
     # Calculate probabilities #
@@ -718,20 +666,15 @@ class set_f(ez):
         # Set A (what will be the probability matrix) to zero:
         p_temp = self.f*np.ones((self.Ny,self.Nx)) # Every grid point starts with some small finite probability of being entrained by fluid
         
+        # Since we're dealing with periodic boundary conditions, we need to extend the domain using 'ghost cells'
+        z_t= self.ghost_z()[:,1:] # Take away the first ghost column, not used in this function
+        
         # Add probabilities of entrainment based on previous e and c matrix.
         # Periodic boundary conditions in both x and y-direction!
         for y,x in np.argwhere(self.e):
-            # Have to be careful when calculating the slope (which is done in c_calc) with periodic boundary conditions. 
-            # For cells that are outside of the domain, we'll calculate the slope (and c_calc) a few points back and just assume it's the same slope.
-            if (x+self.dx[y,x])>(self.Nx-1):
-                dxx = x+self.dx[y,x]-(self.Nx-1) # How far outside domain we are. We will shift location by this much
-                p_temp[y,(x+self.dx[y,x])%self.Nx]   += self.c_calc(y,x-dxx,0,self.dx[y,x])
-                p_temp[(y+1)%self.Ny,(x+self.dx[y,x])%self.Nx] += self.c_calc(y,x-dxx,1,self.dx[y,x])
-                p_temp[(y-1)%self.Ny,(x+self.dx[y,x])%self.Nx] += self.c_calc(y,x-dxx,-1,self.dx[y,x])
-            else:
-                p_temp[y,(x+self.dx[y,x])%self.Nx]   += self.c_calc(y,x,0,self.dx[y,x])
-                p_temp[(y+1)%self.Ny,(x+self.dx[y,x])%self.Nx] += self.c_calc(y,x,1,self.dx[y,x])
-                p_temp[(y-1)%self.Ny,(x+self.dx[y,x])%self.Nx] += self.c_calc(y,x,-1,self.dx[y,x])
+            p_temp[y,(x+self.dx[y,x])%self.Nx]   += self.c_calc(z_t,y,x,0,self.dx[y,x])
+            p_temp[(y+1)%self.Ny,(x+self.dx[y,x])%self.Nx] += self.c_calc(z_t,y,x,1,self.dx[y,x])
+            p_temp[(y-1)%self.Ny,(x+self.dx[y,x])%self.Nx] += self.c_calc(z_t,y,x,-1,self.dx[y,x])
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
