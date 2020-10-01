@@ -205,15 +205,19 @@ class ez():
             inds = np.argwhere(self.ep)
             inds_dep = np.random.choice(len(inds),abs(dp),replace=False)
             for ind in inds[inds_dep]:
-                z_temp[:,1:][tuple(ind)]-=1 # Shifting so that the right places are taken away
-                
+                if periodic:
+                    z_temp[:,1:][tuple(ind)]-=1 # Shifting so that the right places are taken away
+                else:
+                    z_temp[tuple(ind)]-=1
+                    
         # Sets any negative z to zero (although this should not happen...)
         if (z_temp<0).any():
             print("NEGATIVE Z!")
             print(np.where(z_temp<0))
         z_temp[z_temp<0] = 0
         
-        z_temp = z_temp[:,1:self.Nx+1]
+        if periodic:
+            z_temp = z_temp[:,1:self.Nx+1]
         
         return z_temp
     
@@ -533,7 +537,7 @@ class set_q(ez):
         ## We drop q_in number of grains (randomly) at the head of the flume.
         # If q_in < 1, then we drop 1 bead every 1/q_in time steps.
         self.q_in_temp = 0
-        if (self.q_in =< 1)&(self.q_in>0):
+        if (self.q_in <= 1)&(self.q_in>0):
             if self.t % int(1/self.q_in) == 0:
                 indsfull = np.transpose(np.where(~self.ep))
                 indlist = indsfull[(indsfull[:,1]>0)&(indsfull[:,1]<6)]
