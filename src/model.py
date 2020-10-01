@@ -533,7 +533,7 @@ class set_q(ez):
         ## We drop q_in number of grains (randomly) at the head of the flume.
         # If q_in < 1, then we drop 1 bead every 1/q_in time steps.
         self.q_in_temp = 0
-        if self.q_in < 1:
+        if (self.q_in =< 1)&(self.q_in>0):
             if self.t % int(1/self.q_in) == 0:
                 indsfull = np.transpose(np.where(~self.ep))
                 indlist = indsfull[(indsfull[:,1]>0)&(indsfull[:,1]<6)]
@@ -543,15 +543,17 @@ class set_q(ez):
                 self.q_in_temp = 1
             else:
                 pass
-        elif self.q_in > 0:
+        elif self.q_in > 1:
                 indsfull = np.transpose(np.where(~self.ep))
                 indlist = indsfull[(indsfull[:,1]>0)&(indsfull[:,1]<6)]
                 indn = np.random.choice(len(indlist),int(self.q_in),replace=False)
                 ind = np.transpose(indlist[indn])
                 self.ep[tuple(ind)]=True
                 self.q_in_temp = int(self.q_in)
-        else:
+        elif self.q_in==0:
             self.q_in_temp = 0
+        else:
+            print("ERROR: check q_in value.")
         
         ## Update height, given e and ep.
         self.z = self.z_update(q_in_temp = self.q_in_temp) 
