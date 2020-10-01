@@ -262,7 +262,7 @@ class ez():
         x = np.arange(self.Nx)
         
         for i in range(self.Ny):
-            z_temp[i,:] = slope*(self.Nx-x)+self.bed_h
+            z_temp[i,:] = slope*(self.Nx-x)+self.bed_h-1
 
         return z_temp
     
@@ -365,7 +365,7 @@ class ez():
         plt.show()
         return
         
-    def make_movie(self, t_steps, duration, odir,fps=24,name_add=''):
+    def make_movie(self, t_steps, duration, odir,fps=24,name_add='',bed_feedback=True):
         """
         Takes t_steps number of time-steps from *current* state and exports a movie in 'odir' directory that is a maximum of 'duration' seconds long. 
         Note that if the number of frames, in combination with the frames per second, makes a duration less than 20 seconds then it will be 1 fps and will last frames seconds long. 
@@ -390,7 +390,7 @@ class ez():
         qs = [self.bed_activity()]
         dt = 0
         for frame in tqdm.tqdm(range(t_steps)):
-            self.step()
+            self.step(bed_feedback=bed_feedback)
             qs.append(self.bed_activity())  
             dt+=1 
             if dt % dt_frame ==0:
@@ -514,7 +514,7 @@ class set_q(ez):
     ####################
     # Take a time step #
     ####################
-    def step(self,bal=False):     
+    def step(self,bal=False,bed_feedback=True):     
         """
         Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [dx,p,e,z,q_out].
         """
@@ -560,7 +560,8 @@ class set_q(ez):
             print("ERROR: check q_in value.")
         
         ## Update height, given e and ep.
-        self.z = self.z_update(q_in_temp = self.q_in_temp) 
+        if bed_feedback:
+            self.z = self.z_update(q_in_temp = self.q_in_temp)
         
         ## Copies and auxiliary entrainment matrix
         self.e = np.copy(self.ep)
