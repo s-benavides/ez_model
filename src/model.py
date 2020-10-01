@@ -123,7 +123,7 @@ class ez():
     #################
     def z_update(self,periodic=False,q_in_temp = 0):
         """
-        Calculates and returns z, given e (pre-time-step) and ep (post-time-step) entrainment matrices. Does so in a way that conserves grains (unles they leave the domain).
+        Calculates and returns z, given e (pre-time-step) and ep (post-time-step) entrainment matrices. Does so in a way that conserves grains.
         """
         if periodic:
             z_temp = self.ghost_z()
@@ -217,7 +217,15 @@ class ez():
         
         return z_temp
     
+    #######################
+    # Auxiliary functions #
+    #######################
     def ghost_z(self):
+        """
+        Creates an extended domain for the bed. Adds a column upstream of the top and max(x+dx) columns downstream of the bottom.
+        The height of the extrapolated bed heights are calculated by a linear fit of the *entire* bed and then individual topographic features are added to those ghost points based on the difference between the real bed and the fit in the periodic locations.
+        Returns the "ghost" z.
+        """
         # How long do we extend for?
         maxdx = np.max(np.arange(self.Nx)+self.dx) - self.Nx + 1
 
@@ -241,7 +249,18 @@ class ez():
         z_t[:,0] = bed_f[0]+z_diff_t
         
         return z_t
-            
+    
+    def build_bed(self,slope):
+        """
+        Builds a bed with a slope="slope" (input parameter). Returns z_temp, doesn't redefine self.z.
+        """
+        z_temp = np.copy(self.z)
+        x = np.arange(self.Nx)
+        
+        for i in range(self.Ny):
+            z_temp[i,:] = slope*(self.Nx-x)+self.bed_h
+
+        return z_temp
     
     #########################################
     ####       Import/Export      ###########
@@ -345,8 +364,7 @@ class ez():
     def make_movie(self, t_steps, duration, odir,fps=24,name_add=''):
         """
         Takes t_steps number of time-steps from *current* state and exports a movie in 'odir' directory that is a maximum of 'duration' seconds long. 
-        Note that if the number of frames, in combination with the frames per second, makes a duration less than 20 seconds then it will be 1 fps and will last
-        frames seconds long. 
+        Note that if the number of frames, in combination with the frames per second, makes a duration less than 20 seconds then it will be 1 fps and will last frames seconds long. 
         You can also add to the end of the name with the command 'name_add=_(your name here)' (make sure to include the underscore).
         """
         # For saving
@@ -525,13 +543,15 @@ class set_q(ez):
                 self.q_in_temp = 1
             else:
                 pass
-        else:
+        elif self.q_in > 0:
                 indsfull = np.transpose(np.where(~self.ep))
                 indlist = indsfull[(indsfull[:,1]>0)&(indsfull[:,1]<6)]
                 indn = np.random.choice(len(indlist),int(self.q_in),replace=False)
                 ind = np.transpose(indlist[indn])
                 self.ep[tuple(ind)]=True
                 self.q_in_temp = int(self.q_in)
+        else:
+            self.q_in_temp = 0
         
         ## Update height, given e and ep.
         self.z = self.z_update(q_in_temp = self.q_in_temp) 
