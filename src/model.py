@@ -655,7 +655,7 @@ class set_f(ez):
     ####################
     # Take a time step #
     ####################
-    def step(self,bal=False):     
+    def step(self,bal=False,bed_feedback=True):     
         """
         Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [dx,p,e,z,q_out].
         """
@@ -670,7 +670,8 @@ class set_f(ez):
         self.ep = self.e_update() 
         
         ## Update height, given e and ep.
-        self.z = self.z_update(periodic=True) 
+        if bed_feedback:
+            self.z = self.z_update(periodic=True) 
 
         ## Copies and auxiliary entrainment matrix
         self.e = np.copy(self.ep)    
