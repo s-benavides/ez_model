@@ -4,3 +4,5 @@ src/__pycache__/
 examples/*.mp4
 examples/*.p
 local_tests/
+.vscode/
+src/*.jl
