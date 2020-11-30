@@ -7,21 +7,23 @@ from datetime import date
 
 class ez():
     
-    def __init__(self,Nx,Ny,c_0,skipmax):
+    def __init__(self,Nx,Ny,c_0,f,skipmax):
         """
         Initialize the model
-        Parameters
+        Parameters for ez superclass
         ----------
         Nx: number of gridpoints in x-direction
         Ny: number of gridpoints in y-direction
         c_0: collision coefficient at zero slope.
-        skipmax: dx skip max. Will draw randomly from 1 to skipmax for dx.
+        f: probability of entraining due to fluid.
+        skipmax: used to calculate bead jump length from binomial distribution with mean skipmax and variance skipmax/2.
         """
         ## Input parameters to be communicated to other functions:        
         self.Nx = int(Nx)
         self.Ny = int(Ny)
 
         self.c_0 = c_0
+        self.f = f
         self.skipmax = int(skipmax)
         if ((1/self.skipmax)>=np.sqrt((1/(3.*self.c_0))**2-1)):
             print("c_0 is too large! Discreteness will have trouble resolving slope. Note: This warning may be outdated.")
@@ -186,8 +188,6 @@ class ez():
                     ],
                     ])
 
-                # HERE, if done right, I'll be able to undo this.
-                # For periodic boundary conditions, the x location are randomly determined and y location is still minimum.
                 if periodic:
                     indm = np.unravel_index(np.argmin(temp, axis=None), temp.shape)
                     y,x = tuple(tuples[indm])
@@ -473,20 +473,23 @@ class set_q(ez):
     """
     This mode is set up to replicate experiments, where the grains are dropped in on one end at a fixed rate q_in, the main input parameter of this mode, 
     and then flow downstream. These grains then flow out and are measured, but they are not re-introduced.
-    This model does NOT include fluid-induced entrainment. Entrainment only happens due to collisions.
+    Entrainment happens due to collisions and due to random fluid entrainments.
+
+    (see __init__ help for more info on parameters.)
     """
-    def __init__(self,Nx,Ny,q_in,c_0,skipmax):
+    def __init__(self,Nx,Ny,q_in,c_0,f,skipmax):
         """
         Initialize the model
         Parameters for set_q subclass
         ----------
         Nx: number of gridpoints in x-direction
         Ny: number of gridpoints in y-direction
-        c_0: collision coefficient at zero slope.
-        skipmax: dx skip max. Will draw randomly from 1 to skipmax for dx.
         q_in: number of entrained particles at top of the bed (flux in). Can be less than one but must be rational! q_in <= Ny!
+        c_0: collision coefficient at zero slope.
+        f: probability of entraining due to fluid.
+        skipmax: used to calculate bead jump length from binomial distribution with mean skipmax and variance skipmax/2.
         """
-        super().__init__(Nx,Ny,c_0,skipmax)
+        super().__init__(Nx,Ny,c_0,f,skipmax)
         ## Input parameters to be communicated to other functions:        
         if q_in>Ny:
             print("q_in > Ny ! Setting q_in = Ny.")
@@ -517,6 +520,10 @@ class set_q(ez):
     def step(self,bal=False,bed_feedback=True):     
         """
         Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [dx,p,e,z,q_out].
+
+        Options:
+        bal (= False by default): returns sum of active grains, grains in the bed, and grains that left the to check grain number conservation.
+        bed_feedback ( = True by default): if False, then the bed doesn't update and there is no feedback with the bed.
         """
         if bal:
             self.q_tot_out += self.q_out
@@ -582,7 +589,7 @@ class set_q(ez):
         Calculates and returns probability matrix, given c,e, and dx.
         """
         # Set A (what will be the probability matrix) to zero:
-        p_temp = np.zeros((self.Ny,self.Nx))
+        p_temp = self.f*np.ones((self.Ny,self.Nx)) # Every grid point starts with some small finite probability of being entrained by fluid
         
         # Define probabilities of entrainment based on previous e and c matrix.
         # Periodic boundary conditions in y-direction!
@@ -630,7 +637,7 @@ class set_f(ez):
     In this model, the main input parameter is f, which is the probability that extreme events in fluid stresses entrain a grain and move it downstream.
     The entrained grains flow out of one end and, importantly, come back into the other end: this mode has periodic boundary conditions in all directions.
     """
-    def __init__(self,Nx,Ny,f,c_0,skipmax,initial=0.01):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,initial=0.01):
         """
         Initialize the model
         Parameters for set_f subclass
@@ -638,11 +645,10 @@ class set_f(ez):
         Nx: number of gridpoints in x-direction
         Ny: number of gridpoints in y-direction
         c_0: collision coefficient at zero slope.
-        skipmax: dx skip max. Will draw randomly from 1 to skipmax for dx.
-        f: the probability that extreme fluid events will entrain an individual grain at each time step
+        f_0: probability of entraining due to fluid.
+        skipmax: used to calculate bead jump length from binomial distribution with mean skipmax and variance skipmax/2.
         """
-        super().__init__(Nx,Ny,c_0,skipmax)        
-        self.f = f
+        super().__init__(Nx,Ny,c_0,f,skipmax)
 
         # Start with random number entrained
         A = np.random.rand(self.Ny,self.Nx)
@@ -658,6 +664,10 @@ class set_f(ez):
     def step(self,bal=False,bed_feedback=True):     
         """
         Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [dx,p,e,z,q_out].
+
+        Options:
+        bal (= False by default): returns sum of active grains and grains in the bed, to check grain number conservation.
+        bed_feedback ( = True by default): if False, then the bed doesn't update and there is no feedback with the bed.
         """
         
         ## Recalculates dx randomly
