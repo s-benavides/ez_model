@@ -4,8 +4,6 @@ ez superclass
 import numpy as np
 import pickle,tqdm
 from datetime import date
-# Imports erf, special function needed for f
-from scipy.special import erf
 
 class ez():
     
@@ -29,6 +27,8 @@ class ez():
         self.skipmax = int(skipmax)
 
         self.q_in=0.0 
+        if ((1/self.skipmax)>=np.sqrt((1/(3.*self.c_0))**2-1)):
+            print("c_0 is too large! Discreteness will have trouble resolving slope. Note: This warning may be outdated.")
         
         ####################
         ## INITIAL fields ##
