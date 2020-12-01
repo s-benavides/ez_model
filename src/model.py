@@ -4,6 +4,8 @@ ez superclass
 import numpy as np
 import pickle,tqdm
 from datetime import date
+# Imports erf, special function needed for f
+from scipy.special import erf
 
 class ez():
     
@@ -25,8 +27,8 @@ class ez():
         self.c_0 = c_0
         self.f = f
         self.skipmax = int(skipmax)
-        if ((1/self.skipmax)>=np.sqrt((1/(3.*self.c_0))**2-1)):
-            print("c_0 is too large! Discreteness will have trouble resolving slope. Note: This warning may be outdated.")
+
+        self.q_in=0.0 
         
         ####################
         ## INITIAL fields ##
@@ -269,6 +271,11 @@ class ez():
     #########################################
     ####       Import/Export      ###########
     #########################################
+
+    def export_name(self):
+        c0str = str(self.c_0).replace(".", "d")
+        fstr = str(self.f).replace(".", "d")
+        return 'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+str(self.q_in).replace(".","d")+'_c0_'+c0str+'_f_'+fstr+'_skip_'+str(self.skipmax)+'_'+str(date.today())
  
     def get_state(self):
         """
@@ -622,15 +629,6 @@ class set_q(ez):
                 q_out_temp += 1
         return q_out_temp    
 
-
-    #########################################
-    ####       Import/Export      ###########
-    #########################################
-
-    def export_name(self):
-        c0str = str(self.c_0).replace(".", "d")
-        return 'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+str(self.q_in).replace(".","d")+'_c0_'+c0str+'_skip_'+str(self.skipmax)+'_'+str(date.today())
-
 class set_f(ez):
     """
     This mode is set up to replicate 'real life' rivers, in which the fluid stresses sets up a specific sediment flux.
@@ -718,11 +716,3 @@ class set_f(ez):
         p_temp[p_temp>1]=1.0
         
         return p_temp
-
-    #########################################
-    ####       Import/Export      ###########
-    #########################################
-
-    def export_name(self):
-        c0str = str(self.c_0).replace(".", "d")
-        return 'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_f_'+str(self.f).replace(".","d")+'_c0_'+c0str+'_skip_'+str(self.skipmax)+'_'+str(date.today())
