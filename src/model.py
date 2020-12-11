@@ -276,6 +276,7 @@ class ez():
         c0str = str(self.c_0).replace(".", "d")
         fstr = str(self.f).replace(".", "d")
         return 'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+str(self.q_in).replace(".","d")+'_c0_'+c0str+'_f_'+fstr+'_skip_'+str(self.skipmax)+'_'+str(date.today())
+
  
     def get_state(self):
         """
@@ -716,3 +717,237 @@ class set_f(ez):
         p_temp[p_temp>1]=1.0
         
         return p_temp
+
+class set_q_water(ez):
+    """
+    This is the *most realistic* version of the mode is set up to replicate experiments, where the grains are dropped in on one end at a 
+    fixed rate q_in, the main input parameter of this mode, and then flow downstream. These grains then flow out and are measured, but 
+    they are not re-introduced. Entrainment happens due to collisions and due to random fluid entrainments.
+
+    This version empirically-derived relationship between q_in and water height to then calculate (dimensionless) shear stress, which in turn 
+    determines a water velocity and what f and c are.
+
+    All of these are non-dimensionlized in terms of:
+    - r = grain diameter
+    - g = gravitational constant 
+
+    Input parameters:
+     - q_in
+    - c_0, relating shear velocity <u> = sqrt(tau) to particle velocity <u_p>: <u_p> = c_0 <u> = c_0 sqrt(tau) 
+    - It is assumed that the velocity PDF is gaussian with mean <u> = sqrt(tau) (calculated from depth-slope product) and 
+    standard deviation sigma. 
+    - u_c, critical velocity for entrainment of a sigle grain
+    - sigma = u_c/4 by default
+    - dt_strobe = nondimensional time-step size, dt = dt_strobe * (r/g)^(1/2) the dimensional version
+
+    Hop length is now changed to be related to the shear stress velocity: 
+    skipmax = np.int( dx_0 * np.sqrt( np.mean(tau) ) * dt_strobe )
+     - dx_0 is an input parameter set so that we get reasonable hop lengths (although it should be c_0, really)
+
+    We are now able to calculate a domain-averaged dimensionless shear stress and q*, which are now also both outputs. 
+
+    (see __init__ help for more info on parameters.)
+    """
+    def __init__(self,Nx,Ny,q_in,skipmax,B,Q,m_b,rho):
+        """
+        Initialize the model
+        Parameters for set_q subclass
+        ----------
+        Nx: number of gridpoints in x-direction
+        Ny: number of gridpoints in y-direction
+        q_in: number of entrained particles at top of the bed (flux in). Can be less than one but must be rational! q_in <= Ny!
+        c_0: collision coefficient at zero shear stress.
+        skipmax: used to calculate bead jump length from binomial distribution with mean skipmax and variance skipmax/2.
+        B: Dimensionless upstream energy density for the water
+        Q: Dimensionless upstream water mass flux
+        m_b: Dimensionless slope of repose for grains
+        """
+
+
+        f = 1.0 # Will be redefined later, initialize arbitrarily
+        c_0 = 1.0 # Will be redefined later, initialize arbitrarily
+        super().__init__(Nx,Ny,c_0,f,skipmax)
+        self.B = B
+        self.Q = Q
+        self.m_b = m_b
+        self.rho = rho
+
+        # Other calculations based on input params    
+        c_crit = 1/3.
+        self.f_p = (c_crit)**(1/2.)*2**(-0.25)*self.rho**(-1/2)*(self.B)**(-1/2)    
+        self.Hmax = np.min([int(-self.Q/self.Ny/np.sqrt(2)+self.B+40),self.B])
+        self.u_c = (2/3)*(self.m_b*self.Q/self.Ny/(self.B-self.Hmax))
+        self.sigma = self.u_c/4.
+
+        ## Input parameters to be communicated to other functions:        
+        if q_in>Ny:
+            print("q_in > Ny ! Setting q_in = Ny.")
+            self.q_in = self.Ny
+        else:
+            self.q_in = q_in
+        
+        ####################
+        ## INITIAL fields ##
+        ####################
+        # We drop q_in number of grains (randomly) at the beginning.
+        indsfull = np.transpose(np.where(~self.e))
+        indlist = indsfull[(indsfull[:,1]>0)&(indsfull[:,1]<6)]
+        indn = np.random.choice(len(indlist),max(int(self.q_in),1),replace=False)
+        ind = np.transpose(indlist[indn])
+        self.e[tuple(ind)]=True
+        ## Flux out:
+        self.q_out = int(0)
+        self.q_tot_out = int(0)
+
+
+    #########################################
+    ####       Dynamics and Calcs      ######
+    #########################################
+    
+    ####################
+    # Take a time step #
+    ####################
+    def step(self,bal=False,bed_feedback=True):     
+        """
+        Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [dx,p,e,z,q_out].
+
+        Options:
+        bal (= False by default): returns sum of active grains, grains in the bed, and grains that left the to check grain number conservation.
+        bed_feedback ( = True by default): if False, then the bed doesn't update and there is no feedback with the bed.
+        """
+        if bal:
+            self.q_tot_out += self.q_out
+            temp = np.sum(self.e)+np.sum(self.z)+self.q_tot_out
+        
+        ## Recalculates dx randomly
+        self.dx = self.dx_calc() 
+
+        ## Calculates water depth at the top of the flume
+        self.D = self.B-(np.mean(self.z,axis=0) - self.bed_h)[0]
+        
+        [self.tau_0,self.tau] = self.tau_calc()
+
+        self.f = 0.5*(1+erf((np.sqrt(self.tau)-self.u_c)/(np.sqrt(2)*self.sigma)))
+
+        self.c_0 = self.f_p*self.tau
+
+        ## Calculates probabilities, given c, e, and dx
+        self.p = self.p_calc()
+        
+        ## Update new (auxiliary) entrainment matrix, given only p
+        self.ep = self.e_update() 
+        
+        ## Calculates q_out based on e[:,-skipmax:]
+        self.q_out = self.q_out_calc() 
+        
+        ## Update height, given e and ep.
+        self.q_in_temp = 0
+        if bed_feedback:
+            self.z = self.z_update(q_in_temp = self.q_in_temp)
+        
+        if (self.z > np.min([int(-self.Q/self.Ny/np.sqrt(2)+self.B+40),self.B])).any():
+            print("Bed height is too high! Something is wrong.")
+
+        ## Copies and auxiliary entrainment matrix
+        self.e = np.copy(self.ep)
+
+        ## Add to time:
+        self.t += 1
+
+        ## We drop q_in number of grains (randomly) at the head of the flume.
+        # If q_in < 1, then we drop 1 bead every 1/q_in time steps.
+        if (self.q_in <= 1)&(self.q_in>0):
+            if self.t % int(1/self.q_in) == 0:
+                indsfull = np.transpose(np.where(~self.ep))
+                indlist = indsfull[(indsfull[:,1]>0)&(indsfull[:,1]<6)]
+                indn = np.random.choice(len(indlist),1,replace=False)
+                ind = np.transpose(indlist[indn])
+                self.ep[tuple(ind)]=True
+            else:
+                pass
+        elif self.q_in > 1:
+                indsfull = np.transpose(np.where(~self.ep))
+                indlist = indsfull[(indsfull[:,1]>0)&(indsfull[:,1]<6)]
+                indn = np.random.choice(len(indlist),int(self.q_in),replace=False)
+                ind = np.transpose(indlist[indn])
+                self.ep[tuple(ind)]=True
+        elif self.q_in==0:
+            pass
+        else:
+            print("ERROR: check q_in value.")
+
+        if bal:
+            return temp
+        else:
+            return
+        
+    ###########################
+    # Calculate probabilities #
+    ###########################
+    def p_calc(self):
+        """
+        Calculates and returns probability matrix, given c,e, and dx.
+        """
+        p_temp = self.f*np.ones((self.Ny,self.Nx)) # Every grid point starts with some small finite probability of being entrained by fluid
+
+        ftop = 0.5*(1+erf((np.sqrt(self.tau_0)-self.u_c)/(np.sqrt(2)*self.sigma)))
+
+        p_temp[:,0] = ftop*np.ones((self.Ny,self.Nx))[:,0]
+        
+        # Define probabilities of entrainment based on previous e and c matrix.
+        # Periodic boundary conditions in y-direction!
+        for y,x in np.argwhere(self.e):
+            if (self.dx[y,x] + x)<=self.Nx-1:  # Not counting things that went outside
+                p_temp[y,x+self.dx[y,x]]   += self.c_calc(self.z,y,x,0,self.dx[y,x])
+                p_temp[(y+1)%self.Ny,x+self.dx[y,x]] += self.c_calc(self.z,y,x,1,self.dx[y,x])
+                p_temp[(y-1)%self.Ny,x+self.dx[y,x]] += self.c_calc(self.z,y,x,-1,self.dx[y,x])
+        
+        # Make sure p = 1 is the max value.
+        p_temp[p_temp>1]=1.0
+        
+        # Entrain grains that are standing above the 'barrier':
+        inds = np.where(self.z[:,-1]>self.bed_h)[0]
+        p_temp[inds,-1]=1.0
+        
+        return p_temp
+
+    #################
+    # Calculate tau #
+    #################
+    def tau_calc(self):
+        """
+        Calculates and returns domain-averaged shear stress at the top of the flume and at the rest of the flume [tau_0,tau].
+        """
+        tau_0 = (self.rho*self.Q**2*self.m_b)/(self.Ny*self.D)**2
+
+        tau = self.rho*self.D*np.abs(np.mean(np.diff(self.z,axis=1)))
+
+        return [tau_0,tau]
+    
+    ###########################
+    # Calculates q_out (flux) #
+    ###########################
+    def q_out_calc(self):
+        """
+        Calculates and returns q_out, the number of grains leaving the domain.
+        """
+        q_out_temp = int(0)
+        for y,x in np.argwhere(self.e):
+            if ((self.dx[y,x] + x>self.Nx-1)&(self.z[y,x]>self.bed_h)): # Only grains that are above the fixed bed_h barrier leave the domain
+                q_out_temp += 1
+        return q_out_temp    
+
+    #########################################
+    ####       Import/Export      ###########
+    #########################################
+
+    def export_name(self):
+        q_instr = str(self.q_in).replace(".","d") 
+        Bstr = str(self.B).replace(".", "d")
+        Qstr = str(self.Q).replace(".", "d")
+        m_bstr = str(self.m_b).replace(".", "d")
+        f_pstr = str(self.f_p).replace(".", "d")
+        rhostr = str(self.rho).replace(".", "d")
+        return 'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+q_instr+'_B_'+Bstr+'_Q_'+Qstr+'_m_b_'+m_bstr+'_f_p_'+f_pstr+'_rho_'+rhostr+'_skip_'+str(self.skipmax)+'_'+str(date.today())
+
+ 
