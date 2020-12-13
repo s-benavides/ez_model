@@ -2,12 +2,13 @@
 ez superclass
 """
 import numpy as np
-import pickle,tqdm
+import tqdm
 from datetime import date
+import h5py
 
 class ez():
     
-    def __init__(self,Nx,Ny,c_0,f,skipmax):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,dt=22.14,rho = 1.6):
         """
         Initialize the model
         Parameters for ez superclass
@@ -17,10 +18,15 @@ class ez():
         c_0: collision coefficient at zero slope.
         f: probability of entraining due to fluid.
         skipmax: used to calculate bead jump length from binomial distribution with mean skipmax and variance skipmax/2.
+        dt: dimensionless time between time-steps (used for calculating q*). Default = 22.14, based on dt_strobe = 0.5 s in real life.
+        rho: (rho_fluid / (rho_sediment - rho_fluid ))**(1/2) (used for calculating q*). Default = 1.6, based on glass spheres and water.
         """
         ## Input parameters to be communicated to other functions:        
         self.Nx = int(Nx)
         self.Ny = int(Ny)
+
+        self.dt  = dt
+        self.rho = rho
 
         self.c_0 = c_0
         self.f = f
@@ -44,7 +50,8 @@ class ez():
         ## Probabilities
         self.p = np.zeros((Ny,Nx))
         ## Time:
-        self.t = int(0)        
+        self.t = 0.0
+        self.tstep = int(0)             
         
         ## Initiates calculations:
         # Jump lengths
@@ -279,16 +286,16 @@ class ez():
  
     def get_state(self):
         """
-        Get current state of model: returns [z,e,p,dx,t]
+        Get current state of model: returns [z,e,p,dx,t,tstep]
         """
-        return [self.z,self.e,self.p,self.dx,self.t]
+        return [self.z,self.e,self.p,self.dx,self.t,self.tstep]
     
     def set_state(self,data):
         """
-        Set current state of model: input must be in format [z,e,p,dx,t]. To be used with 'load_data'. 
+        Set current state of model: input must be in format [z,e,p,dx,t,tstep]. To be used with 'load_data'. 
         No need to use set_state unless you want to manually create a dataset.
         """
-        [self.z,self.e,self.p,self.dx,self.t] = data
+        [self.z,self.e,self.p,self.dx,self.t,self.tstep] = data
         return
     
     def load_data(self,name):
@@ -484,7 +491,7 @@ class set_q(ez):
 
     (see __init__ help for more info on parameters.)
     """
-    def __init__(self,Nx,Ny,q_in,c_0,f,skipmax):
+    def __init__(self,Nx,Ny,q_in,c_0,f,skipmax,dt,rho):
         """
         Initialize the model
         Parameters for set_q subclass
@@ -495,8 +502,10 @@ class set_q(ez):
         c_0: collision coefficient at zero slope.
         f: probability of entraining due to fluid.
         skipmax: used to calculate bead jump length from binomial distribution with mean skipmax and variance skipmax/2.
+        dt: dimensionless time between time-steps (used for calculating q*). Default = 22.14, based on dt_strobe = 0.5 s in real life.
+        rho: (rho_fluid / (rho_sediment - rho_fluid ))**(1/2) (used for calculating q*). Default = 1.6, based on glass spheres and water.
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax)
+        super().__init__(Nx,Ny,c_0,f,skipmax,dt,rho)
         ## Input parameters to be communicated to other functions:        
         if q_in>Ny:
             print("q_in > Ny ! Setting q_in = Ny.")
@@ -581,7 +590,8 @@ class set_q(ez):
         self.e = np.copy(self.ep)
 
         ## Add to time:
-        self.t += 1
+        self.tstep += 1
+        self.t     += self.dt
 
         if bal:
             return temp
@@ -645,8 +655,10 @@ class set_f(ez):
         c_0: collision coefficient at zero slope.
         f_0: probability of entraining due to fluid.
         skipmax: used to calculate bead jump length from binomial distribution with mean skipmax and variance skipmax/2.
+        dt: dimensionless time between time-steps (used for calculating q*). Default = 22.14, based on dt_strobe = 0.5 s in real life.
+        rho: (rho_fluid / (rho_sediment - rho_fluid ))**(1/2) (used for calculating q*). Default = 1.6, based on glass spheres and water.
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax)
+        super().__init__(Nx,Ny,c_0,f,skipmax,dt,rho)
 
         # Start with random number entrained
         A = np.random.rand(self.Ny,self.Nx)
@@ -685,7 +697,8 @@ class set_f(ez):
         self.e = np.copy(self.ep)    
 
         ## Add to time:
-        self.t += 1        
+        self.tstep += 1
+        self.t     += self.dt 
         
         if bal:
             return np.sum(self.e)+np.sum(self.z)
