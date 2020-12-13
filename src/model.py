@@ -8,7 +8,7 @@ import h5py
 
 class ez():
     
-    def __init__(self,Nx,Ny,c_0,f,skipmax,dt=22.14,rho = 1.6):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,dt=22.14,rho = 1.6,initial=0.0):
         """
         Initialize the model
         Parameters for ez superclass
@@ -20,6 +20,7 @@ class ez():
         skipmax: used to calculate bead jump length from binomial distribution with mean skipmax and variance skipmax/2.
         dt: dimensionless time between time-steps (used for calculating q*). Default = 22.14, based on dt_strobe = 0.5 s in real life.
         rho: (rho_fluid / (rho_sediment - rho_fluid ))**(1/2) (used for calculating q*). Default = 1.6, based on glass spheres and water.
+        initial: initial condition -- all sites are activated with a probability equal to initial
         """
         ## Input parameters to be communicated to other functions:        
         self.Nx = int(Nx)
@@ -42,9 +43,9 @@ class ez():
         ## Height. Start with z = bed_h everywhere. (to avoid negative values of z)
         self.bed_h = 100
         self.z = self.bed_h*np.ones((Ny,Nx),dtype=int)
-        ## Entrained or not
-        # Start with none entrained
-        self.e = np.zeros((Ny,Nx),dtype=bool)
+        # Start with random number entrained
+        A = np.random.rand(self.Ny,self.Nx)
+        self.e = A<initial
         # The auxiliary e:
         self.ep = np.zeros((Ny,Nx),dtype=bool)
         ## Probabilities
@@ -56,6 +57,7 @@ class ez():
         ## Initiates calculations:
         # Jump lengths
         self.dx = self.dx_calc()
+
 
     #########################################
     ####       Dynamics and Calcs      ######
@@ -289,29 +291,114 @@ class ez():
         Get current state of model: returns [z,e,p,dx,t,tstep]
         """
         return [self.z,self.e,self.p,self.dx,self.t,self.tstep]
+
+    def get_params(self):
+        """
+        Get parameters of model: returns [Nx,Ny,c_0,f,skipmax,dt,rho]
+        """
+        return [self.Nx,self.Ny,self.c_0,self.f,self.skipmax,self.dt,self.rho]
+    
+    def get_scalars(self):
+        """
+        Get scalar outputs of model: returns [tstep, time, bed_activity]
+        """
+        return [self.tstep,self.t,self.bed_activity()]
     
     def set_state(self,data):
         """
-        Set current state of model: input must be in format [z,e,p,dx,t,tstep]. To be used with 'load_data'. 
+        Set current state of model: input must be in format [tstep,t,z,e,p,dx]. To be used with 'load_data'. 
         No need to use set_state unless you want to manually create a dataset.
         """
-        [self.z,self.e,self.p,self.dx,self.t,self.tstep] = data
+        [self.tstep,self.t,self.z,self.e,self.p,self.dx] = data
         return
     
     def load_data(self,name):
         """
-        Imports pickle file with given name and sets the state of the model. Note that you can also manually set the state by calling the 'set_state' fuction.
+        Imports .h5 file with given name and sets the state of the model. Note that you can also manually set the state by calling the 'set_state' fuction.
         """
-        data = pickle.load( open(str(name), 'rb'))
-        self.set_state(data)
+        fname = odir+ self.export_name() +'.h5'
+        f = h5py.File(fname,'r')
+        self.tstep = f['state']['tstep'][-1]
+        self.t = f['state']['time'][-1]
+        self.z = f['state']['z'][-1]
+        self.e = f['state']['e'][-1]
+        self.p = f['state']['p'][-1]
+        self.dx = f['state']['dx'][-1]
+        
         return 
 
-    def export_data(self,odir):
+    def export_state(self,odir,save_type = 'a'):
         """
-        Exports full data into directory 'odir', named with today's date.
+        Inputs: name (name of file), odir (output directory), save_type ('w' = overwrite (new file), 'a' = append or create new)
+
+        Exports 'name.h5' file, which contains two groups: 
+            1) 'parameters' (depends on the mode)
+            2) 'state' [tstep,t,z,e,p,dx]
+        into directory 'odir'.
         """
-        name = odir+ self.export_name() +'.p'
-        pickle.dump(self.get_state(), open(str(name), 'wb'))
+        fname = odir+ self.export_name() +'.h5'
+        f = h5py.File(fname,save_type)
+        if self.tstep==0:
+            # Parameters
+            params = f.create_group('parameters')
+            params.create_dataset('parameters',data=self.get_params())
+
+            # State of simulation
+            state = f.create_group('state')
+            state.create_dataset('tstep', data = [self.tstep],maxshape=(None,),chunks=True)
+            state.create_dataset('time', data = [self.t],maxshape=(None,),chunks=True)
+            state.create_dataset('z', data = [self.z],maxshape=(None,),chunks=True)
+            state.create_dataset('e', data = [self.e],maxshape=(None,),chunks=True)
+            state.create_dataset('p', data = [self.p],maxshape=(None,),chunks=True)
+            state.create_dataset('dx', data = [self.dx],maxshape=(None,),chunks=True)
+        else:
+            state = f['state']
+            state['tstep'].resize((state['tstep'].shape[0] + 1), axis = 0)
+            state['tstep'][-1:] = [self.tstep]
+            state['time'].resize((state['time'].shape[0] + 1), axis = 0)
+            state['time'][-1:] = [self.t]
+            state['z'].resize((state['z'].shape[0] + 1), axis = 0)
+            state['z'][-1:] = [self.z]
+            state['e'].resize((state['e'].shape[0] + 1), axis = 0)
+            state['e'][-1:] = [self.e]
+            state['p'].resize((state['p'].shape[0] + 1), axis = 0)
+            state['p'][-1:] = [self.p]
+            state['dx'].resize((state['dx'].shape[0] + 1), axis = 0)
+            state['dx'][-1:] = [self.dx]
+
+        f.close()
+        return
+
+    def export_scalars(self,odir,save_type = 'a'):
+        """
+        Inputs: odir (output directory), save_type ('w' = overwrite (new file), 'a' = append or create new)
+
+        Exports self.export_name()+'.h5' file, which contains two groups: 
+            1) 'parameters' (depends on the mode)
+            2) 'observables' (depends on the mode) 
+        into directory 'odir', named with today's date.
+        """
+        fname = odir+ self.export_name() +'.h5'
+        f = h5py.File(fname,save_type)
+        if self.tstep==0:
+            # Parameters
+            params = f.create_group('parameters')
+            params.create_dataset('parameters',data=self.get_params())
+
+            scalars = f.create_group('scalars')
+            scalars.create_dataset('tstep', data = [self.tstep],maxshape=(None,),chunks=True)
+            scalars.create_dataset('time', data = [self.t],maxshape=(None,),chunks=True)
+            scalars.create_dataset('bed_activity', data = [self.bed_activity()],maxshape=(None,),chunks=True)
+        else:
+            scalars = f['scalars']
+            scalars['tstep'].resize((scalars['tstep'].shape[0] + 1), axis = 0)
+            scalars['tstep'][-1:] = [self.tstep]
+            scalars['time'].resize((scalars['time'].shape[0] + 1), axis = 0)
+            scalars['time'][-1:] = [self.t]
+            scalars['bed_activity'].resize((scalars['bed_activity'].shape[0] + 1), axis = 0)
+            scalars['bed_activity'][-1:] = [self.bed_activity()]
+
+        f.close()
         return
 
     #########################################
@@ -491,21 +578,22 @@ class set_q(ez):
 
     (see __init__ help for more info on parameters.)
     """
-    def __init__(self,Nx,Ny,q_in,c_0,f,skipmax,dt,rho):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,dt=22.14,rho=1.6,initial=0.0,q_in):
         """
         Initialize the model
         Parameters for set_q subclass
         ----------
         Nx: number of gridpoints in x-direction
         Ny: number of gridpoints in y-direction
-        q_in: number of entrained particles at top of the bed (flux in). Can be less than one but must be rational! q_in <= Ny!
         c_0: collision coefficient at zero slope.
         f: probability of entraining due to fluid.
         skipmax: used to calculate bead jump length from binomial distribution with mean skipmax and variance skipmax/2.
         dt: dimensionless time between time-steps (used for calculating q*). Default = 22.14, based on dt_strobe = 0.5 s in real life.
         rho: (rho_fluid / (rho_sediment - rho_fluid ))**(1/2) (used for calculating q*). Default = 1.6, based on glass spheres and water.
+        initial: initial condition -- all sites are activated with a probability equal to initial
+        q_in: number of entrained particles at top of the bed (flux in). Can be less than one but must be rational! q_in <= Ny!
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,dt,rho)
+        super().__init__(Nx,Ny,c_0,f,skipmax,dt,rho,initial)
         ## Input parameters to be communicated to other functions:        
         if q_in>Ny:
             print("q_in > Ny ! Setting q_in = Ny.")
@@ -538,7 +626,7 @@ class set_q(ez):
         Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [dx,p,e,z,q_out].
 
         Options:
-        bal (= False by default): returns sum of active grains, grains in the bed, and grains that left the to check grain number conservation.
+        bal (= False by default): returns sum of active grains, grains in the bed, and grains that left the domain to check grain number conservation.
         bed_feedback ( = True by default): if False, then the bed doesn't update and there is no feedback with the bed.
         """
         if bal:
@@ -639,13 +727,64 @@ class set_q(ez):
                 q_out_temp += 1
         return q_out_temp    
 
+    ##########
+    # Extras #
+    ##########
+
+    def get_params(self):
+        """
+        Get parameters of model: returns [Nx,Ny,c_0,f,skipmax,dt,rho,q_in]
+        """
+        return [self.Nx,self.Ny,self.c_0,self.f,self.skipmax,self.dt,self.rho,self.q_in]
+
+    def get_scalars(self):
+        """
+        Get scalar outputs of model: returns [tstep, time, bed_activity,q_out]
+        """
+        return [self.tstep,self.t,self.bed_activity(),slef.q_out_calc()]
+
+    def export_scalars(self,odir,save_type = 'a'):
+        """
+        Inputs: odir (output directory), save_type ('w' = overwrite (new file), 'a' = append or create new)
+
+        Exports self.export_name()+'.h5' file, which contains two groups: 
+            1) 'parameters' (depends on the mode)
+            2) 'observables' (depends on the mode) 
+        into directory 'odir', named with today's date.
+        """
+        fname = odir+ self.export_name() +'.h5'
+        f = h5py.File(fname,save_type)
+        if self.tstep==0:
+            # Parameters
+            params = f.create_group('parameters')
+            params.create_dataset('parameters',data=self.get_params())
+
+            scalars = f.create_group('scalars')
+            scalars.create_dataset('tstep', data = [self.tstep],maxshape=(None,),chunks=True)
+            scalars.create_dataset('time', data = [self.t],maxshape=(None,),chunks=True)
+            scalars.create_dataset('bed_activity', data = [self.bed_activity()],maxshape=(None,),chunks=True)
+            scalars.create_dataset('q_out', data = [self.q_out_calc()],maxshape=(None,),chunks=True)
+        else:
+            scalars = f['scalars']
+            scalars['tstep'].resize((scalars['tstep'].shape[0] + 1), axis = 0)
+            scalars['tstep'][-1:] = [self.tstep]
+            scalars['time'].resize((scalars['time'].shape[0] + 1), axis = 0)
+            scalars['time'][-1:] = [self.t]
+            scalars['bed_activity'].resize((scalars['bed_activity'].shape[0] + 1), axis = 0)
+            scalars['bed_activity'][-1:] = [self.bed_activity()]
+            scalars['q_out'].resize((scalars['q_out'].shape[0] + 1), axis = 0)
+            scalars['q_out'][-1:] = [self.q_out_calc()]
+
+        f.close()
+        return
+
 class set_f(ez):
     """
     This mode is set up to replicate 'real life' rivers, in which the fluid stresses sets up a specific sediment flux.
     In this model, the main input parameter is f, which is the probability that extreme events in fluid stresses entrain a grain and move it downstream.
     The entrained grains flow out of one end and, importantly, come back into the other end: this mode has periodic boundary conditions in all directions.
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,initial=0.01):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,dt=22.14,rho=1.6,initial=0.01):
         """
         Initialize the model
         Parameters for set_f subclass
@@ -657,12 +796,9 @@ class set_f(ez):
         skipmax: used to calculate bead jump length from binomial distribution with mean skipmax and variance skipmax/2.
         dt: dimensionless time between time-steps (used for calculating q*). Default = 22.14, based on dt_strobe = 0.5 s in real life.
         rho: (rho_fluid / (rho_sediment - rho_fluid ))**(1/2) (used for calculating q*). Default = 1.6, based on glass spheres and water.
+        initial: initial condition -- all sites are activated with a probability equal to initial
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,dt,rho)
-
-        # Start with random number entrained
-        A = np.random.rand(self.Ny,self.Nx)
-        self.e = A<initial
+        super().__init__(Nx,Ny,c_0,f,skipmax,dt,rho,initial)
         
     #########################################
     ####       Dynamics and Calcs      ######
@@ -680,6 +816,10 @@ class set_f(ez):
         bed_feedback ( = True by default): if False, then the bed doesn't update and there is no feedback with the bed.
         """
         
+        ## Export data:
+        if (export_scalars>0)&(self.tstep % export_scalars == 0):
+            self.export_
+
         ## Recalculates dx randomly
         self.dx = self.dx_calc() 
 
