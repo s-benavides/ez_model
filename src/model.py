@@ -324,7 +324,7 @@ class ez():
         self.e = f['state']['e'][-1]
         self.p = f['state']['p'][-1]
         self.dx = f['state']['dx'][-1]
-        
+
         return 
 
     def export_state(self,odir,save_type = 'a'):
@@ -578,7 +578,7 @@ class set_q(ez):
 
     (see __init__ help for more info on parameters.)
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,dt=22.14,rho=1.6,initial=0.0,q_in):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,q_in,dt=22.14,rho=1.6,initial=0.0):
         """
         Initialize the model
         Parameters for set_q subclass
@@ -588,10 +588,10 @@ class set_q(ez):
         c_0: collision coefficient at zero slope.
         f: probability of entraining due to fluid.
         skipmax: used to calculate bead jump length from binomial distribution with mean skipmax and variance skipmax/2.
+        q_in: number of entrained particles at top of the bed (flux in). Can be less than one but must be rational! q_in <= Ny!
         dt: dimensionless time between time-steps (used for calculating q*). Default = 22.14, based on dt_strobe = 0.5 s in real life.
         rho: (rho_fluid / (rho_sediment - rho_fluid ))**(1/2) (used for calculating q*). Default = 1.6, based on glass spheres and water.
         initial: initial condition -- all sites are activated with a probability equal to initial
-        q_in: number of entrained particles at top of the bed (flux in). Can be less than one but must be rational! q_in <= Ny!
         """
         super().__init__(Nx,Ny,c_0,f,skipmax,dt,rho,initial)
         ## Input parameters to be communicated to other functions:        
