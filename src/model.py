@@ -296,7 +296,7 @@ class ez():
         """
         Get parameters of model: returns [Nx,Ny,c_0,f,skipmax,dt,rho]
         """
-        return [self.Nx,self.Ny,self.c_0,self.f,self.skipmax,self.dt,self.rho]
+        return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'dt':self.dt,'rho':self.rho}
     
     def get_scalars(self):
         """
@@ -314,43 +314,46 @@ class ez():
     
     def load_data(self,name):
         """
-        Imports .h5 file with given name and sets the state of the model. Note that you can also manually set the state by calling the 'set_state' fuction.
+        Imports .h5 file with given name and sets the state of the model. Note that you can also manually set the state by calling the 
+        'set_state' fuction.
         """
-        fname = odir+ self.export_name() +'.h5'
-        f = h5py.File(fname,'r')
+        f = h5py.File(name,'r')
         self.tstep = f['state']['tstep'][-1]
         self.t = f['state']['time'][-1]
         self.z = f['state']['z'][-1]
         self.e = f['state']['e'][-1]
         self.p = f['state']['p'][-1]
         self.dx = f['state']['dx'][-1]
+        f.close()
 
         return 
 
     def export_state(self,odir,save_type = 'a'):
         """
-        Inputs: name (name of file), odir (output directory), save_type ('w' = overwrite (new file), 'a' = append or create new)
+        Inputs: name (name of file), odir (output directory), save_type ('w' = overwrite, 'a' = append or create new, default)
 
         Exports 'name.h5' file, which contains two groups: 
             1) 'parameters' (depends on the mode)
             2) 'state' [tstep,t,z,e,p,dx]
         into directory 'odir'.
         """
-        fname = odir+ self.export_name() +'.h5'
+        fname = odir+ self.export_name() +'_state.h5'
         f = h5py.File(fname,save_type)
         if self.tstep==0:
             # Parameters
             params = f.create_group('parameters')
-            params.create_dataset('parameters',data=self.get_params())
+            paramdict = self.get_params()
+            for k, v in paramdict.items():
+                params.create_dataset(k, data=np.array(v))
 
             # State of simulation
             state = f.create_group('state')
             state.create_dataset('tstep', data = [self.tstep],maxshape=(None,),chunks=True)
             state.create_dataset('time', data = [self.t],maxshape=(None,),chunks=True)
-            state.create_dataset('z', data = [self.z],maxshape=(None,),chunks=True)
-            state.create_dataset('e', data = [self.e],maxshape=(None,),chunks=True)
-            state.create_dataset('p', data = [self.p],maxshape=(None,),chunks=True)
-            state.create_dataset('dx', data = [self.dx],maxshape=(None,),chunks=True)
+            state.create_dataset('z', data = [self.z],maxshape=(None,np.shape(self.z)[0],np.shape(self.z)[1]),chunks=True)
+            state.create_dataset('e', data = [self.e],maxshape=(None,np.shape(self.e)[0],np.shape(self.e)[1]),chunks=True)
+            state.create_dataset('p', data = [self.p],maxshape=(None,np.shape(self.p)[0],np.shape(self.p)[1]),chunks=True)
+            state.create_dataset('dx', data = [self.dx],maxshape=(None,np.shape(self.dx)[0],np.shape(self.dx)[1]),chunks=True)
         else:
             state = f['state']
             state['tstep'].resize((state['tstep'].shape[0] + 1), axis = 0)
@@ -378,12 +381,14 @@ class ez():
             2) 'observables' (depends on the mode) 
         into directory 'odir', named with today's date.
         """
-        fname = odir+ self.export_name() +'.h5'
+        fname = odir+ self.export_name() +'_scalars.h5'
         f = h5py.File(fname,save_type)
         if self.tstep==0:
             # Parameters
             params = f.create_group('parameters')
-            params.create_dataset('parameters',data=self.get_params())
+            paramdict = self.get_params()
+            for k, v in paramdict.items():
+                params.create_dataset(k, data=np.array(v))
 
             scalars = f.create_group('scalars')
             scalars.create_dataset('tstep', data = [self.tstep],maxshape=(None,),chunks=True)
@@ -735,13 +740,13 @@ class set_q(ez):
         """
         Get parameters of model: returns [Nx,Ny,c_0,f,skipmax,dt,rho,q_in]
         """
-        return [self.Nx,self.Ny,self.c_0,self.f,self.skipmax,self.dt,self.rho,self.q_in]
+        return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'dt':self.dt,'rho':self.rho,'q_in':self.q_in}
 
     def get_scalars(self):
         """
         Get scalar outputs of model: returns [tstep, time, bed_activity,q_out]
         """
-        return [self.tstep,self.t,self.bed_activity(),slef.q_out_calc()]
+        return [self.tstep,self.t,self.bed_activity(),self.q_out_calc()]
 
     def export_scalars(self,odir,save_type = 'a'):
         """
@@ -752,12 +757,14 @@ class set_q(ez):
             2) 'observables' (depends on the mode) 
         into directory 'odir', named with today's date.
         """
-        fname = odir+ self.export_name() +'.h5'
+        fname = odir+ self.export_name() +'_scalars.h5'
         f = h5py.File(fname,save_type)
         if self.tstep==0:
             # Parameters
             params = f.create_group('parameters')
-            params.create_dataset('parameters',data=self.get_params())
+            paramdict = self.get_params()
+            for k, v in paramdict.items():
+                params.create_dataset(k, data=np.array(v))
 
             scalars = f.create_group('scalars')
             scalars.create_dataset('tstep', data = [self.tstep],maxshape=(None,),chunks=True)
