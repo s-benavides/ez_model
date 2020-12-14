@@ -3,7 +3,6 @@ ez superclass
 """
 import numpy as np
 import tqdm
-from datetime import date
 import h5py
 
 class ez():
@@ -58,6 +57,8 @@ class ez():
         # Jump lengths
         self.dx = self.dx_calc()
 
+        ## Output keys:
+        self.okeys = ['tstep','time','bed_activity']
 
     #########################################
     ####       Dynamics and Calcs      ######
@@ -284,7 +285,7 @@ class ez():
     def export_name(self):
         c0str = str(self.c_0).replace(".", "d")
         fstr = str(self.f).replace(".", "d")
-        return 'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+str(self.q_in).replace(".","d")+'_c0_'+c0str+'_f_'+fstr+'_skip_'+str(self.skipmax)+'_'+str(date.today())
+        return 'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+str(self.q_in).replace(".","d")+'_c0_'+c0str+'_f_'+fstr+'_skip_'+str(self.skipmax)
  
     def get_state(self):
         """
@@ -328,17 +329,18 @@ class ez():
 
         return 
 
-    def export_state(self,odir,save_type = 'a'):
+    def export_state(self,odir):
         """
-        Inputs: name (name of file), odir (output directory), save_type ('w' = overwrite, 'a' = append or create new, default)
+        Inputs: name (name of file), odir (output directory)
 
-        Exports 'name.h5' file, which contains two groups: 
+        Exports odir+ self.export_name() +'_state.h5' file, 
+        which contains two groups: 
             1) 'parameters' (depends on the mode)
             2) 'state' [tstep,t,z,e,p,dx]
         into directory 'odir'.
         """
         fname = odir+ self.export_name() +'_state.h5'
-        f = h5py.File(fname,save_type)
+        f = h5py.File(fname,'a')
         if self.tstep==0:
             # Parameters
             params = f.create_group('parameters')
@@ -372,36 +374,36 @@ class ez():
         f.close()
         return
 
-    def export_scalars(self,odir,save_type = 'a'):
+    def export_scalars(self,odir,data,restart=False):
         """
-        Inputs: odir (output directory), save_type ('w' = overwrite (new file), 'a' = append or create new)
+        Inputs: 
+         - odir (output directory)
+         - data (data, based on appending self.get_scalars() in loop)
+         - restart (=False by default), if True, then appends to the currently
+         existing file. 
 
         Exports self.export_name()+'.h5' file, which contains two groups: 
             1) 'parameters' (depends on the mode)
-            2) 'observables' (depends on the mode) 
-        into directory 'odir', named with today's date.
+            2) 'scalars' (depends on the mode) 
+        into directory 'odir'.
         """
         fname = odir+ self.export_name() +'_scalars.h5'
-        f = h5py.File(fname,save_type)
-        if self.tstep==0:
+        f = h5py.File(fname,'a')
+
+        if not restart:
             # Parameters
             params = f.create_group('parameters')
-            paramdict = self.get_params()
-            for k, v in paramdict.items():
+            for k, v in self.get_params().items():
                 params.create_dataset(k, data=np.array(v))
 
             scalars = f.create_group('scalars')
-            scalars.create_dataset('tstep', data = [self.tstep],maxshape=(None,),chunks=True)
-            scalars.create_dataset('time', data = [self.t],maxshape=(None,),chunks=True)
-            scalars.create_dataset('bed_activity', data = [self.bed_activity()],maxshape=(None,),chunks=True)
-        else:
-            scalars = f['scalars']
-            scalars['tstep'].resize((scalars['tstep'].shape[0] + 1), axis = 0)
-            scalars['tstep'][-1:] = [self.tstep]
-            scalars['time'].resize((scalars['time'].shape[0] + 1), axis = 0)
-            scalars['time'][-1:] = [self.t]
-            scalars['bed_activity'].resize((scalars['bed_activity'].shape[0] + 1), axis = 0)
-            scalars['bed_activity'][-1:] = [self.bed_activity()]
+            for ii,d in enumerate(np.array(data).T):
+                scalars.create_dataset(self.okeys[ii],data=np.array(d))
+        
+        elif restart:
+            for ii,d in enumerate(np.array(data).T):
+                del f['scalars'][self.okeys[ii]]
+                f['scalars'][self.okeys[ii]] = np.array(d)
 
         f.close()
         return
@@ -569,7 +571,6 @@ class ez():
 
         # Try to set the DPI to the actual number of pixels you're plotting
         writer = FFMpegWriter(fps=fps, metadata=dict(artist='Me'), bitrate=1800)
-        c0str = str(self.c_0).replace(".", "d")
         name = odir+self.export_name()+name_add+'.mp4'
         sim.save(name, dpi=300, writer=writer)
 
@@ -618,6 +619,9 @@ class set_q(ez):
         ## Flux out:
         self.q_out = int(0)
         self.q_tot_out = int(0)
+
+        ## Output keys:
+        self.okeys = ['tstep','time','bed_activity','q_out']
 
     #########################################
     ####       Dynamics and Calcs      ######
@@ -747,43 +751,6 @@ class set_q(ez):
         Get scalar outputs of model: returns [tstep, time, bed_activity,q_out]
         """
         return [self.tstep,self.t,self.bed_activity(),self.q_out_calc()]
-
-    def export_scalars(self,odir,save_type = 'a'):
-        """
-        Inputs: odir (output directory), save_type ('w' = overwrite (new file), 'a' = append or create new)
-
-        Exports self.export_name()+'.h5' file, which contains two groups: 
-            1) 'parameters' (depends on the mode)
-            2) 'observables' (depends on the mode) 
-        into directory 'odir', named with today's date.
-        """
-        fname = odir+ self.export_name() +'_scalars.h5'
-        f = h5py.File(fname,save_type)
-        if self.tstep==0:
-            # Parameters
-            params = f.create_group('parameters')
-            paramdict = self.get_params()
-            for k, v in paramdict.items():
-                params.create_dataset(k, data=np.array(v))
-
-            scalars = f.create_group('scalars')
-            scalars.create_dataset('tstep', data = [self.tstep],maxshape=(None,),chunks=True)
-            scalars.create_dataset('time', data = [self.t],maxshape=(None,),chunks=True)
-            scalars.create_dataset('bed_activity', data = [self.bed_activity()],maxshape=(None,),chunks=True)
-            scalars.create_dataset('q_out', data = [self.q_out_calc()],maxshape=(None,),chunks=True)
-        else:
-            scalars = f['scalars']
-            scalars['tstep'].resize((scalars['tstep'].shape[0] + 1), axis = 0)
-            scalars['tstep'][-1:] = [self.tstep]
-            scalars['time'].resize((scalars['time'].shape[0] + 1), axis = 0)
-            scalars['time'][-1:] = [self.t]
-            scalars['bed_activity'].resize((scalars['bed_activity'].shape[0] + 1), axis = 0)
-            scalars['bed_activity'][-1:] = [self.bed_activity()]
-            scalars['q_out'].resize((scalars['q_out'].shape[0] + 1), axis = 0)
-            scalars['q_out'][-1:] = [self.q_out_calc()]
-
-        f.close()
-        return
 
 class set_f(ez):
     """
