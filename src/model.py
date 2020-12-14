@@ -823,10 +823,6 @@ class set_f(ez):
         bed_feedback ( = True by default): if False, then the bed doesn't update and there is no feedback with the bed.
         """
         
-        ## Export data:
-        if (export_scalars>0)&(self.tstep % export_scalars == 0):
-            self.export_
-
         ## Recalculates dx randomly
         self.dx = self.dx_calc() 
 
