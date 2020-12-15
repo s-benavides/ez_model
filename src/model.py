@@ -4,6 +4,7 @@ ez superclass
 import numpy as np
 import tqdm
 import h5py
+from os import path
 
 class ez():
     
@@ -329,9 +330,11 @@ class ez():
 
         return 
 
-    def export_state(self,odir):
+    def export_state(self,odir,overwrite=True):
         """
-        Inputs: name (name of file), odir (output directory)
+        Inputs: name (name of file), odir (output directory), overwrite (=True by default), if True, then regardless 
+        of if there is already a file there or not, it'll overwrite that file. Otherwise, it'll append to the 
+        currently existing file. If there is no file, then it will create one.
 
         Exports odir+ self.export_name() +'_state.h5' file, 
         which contains two groups: 
@@ -340,8 +343,8 @@ class ez():
         into directory 'odir'.
         """
         fname = odir+ self.export_name() +'_state.h5'
-        f = h5py.File(fname,'a')
-        if self.tstep==0:
+        if not path.exists(fname):
+            f = h5py.File(fname,'w')
             # Parameters
             params = f.create_group('parameters')
             paramdict = self.get_params()
@@ -357,30 +360,51 @@ class ez():
             state.create_dataset('p', data = [self.p],maxshape=(None,np.shape(self.p)[0],np.shape(self.p)[1]),chunks=True)
             state.create_dataset('dx', data = [self.dx],maxshape=(None,np.shape(self.dx)[0],np.shape(self.dx)[1]),chunks=True)
         else:
-            state = f['state']
-            state['tstep'].resize((state['tstep'].shape[0] + 1), axis = 0)
-            state['tstep'][-1:] = [self.tstep]
-            state['time'].resize((state['time'].shape[0] + 1), axis = 0)
-            state['time'][-1:] = [self.t]
-            state['z'].resize((state['z'].shape[0] + 1), axis = 0)
-            state['z'][-1:] = [self.z]
-            state['e'].resize((state['e'].shape[0] + 1), axis = 0)
-            state['e'][-1:] = [self.e]
-            state['p'].resize((state['p'].shape[0] + 1), axis = 0)
-            state['p'][-1:] = [self.p]
-            state['dx'].resize((state['dx'].shape[0] + 1), axis = 0)
-            state['dx'][-1:] = [self.dx]
+            if overwrite:
+                f = h5py.File(fname,'w')
+                
+                # Parameters
+                params = f.create_group('parameters')
+                paramdict = self.get_params()
+                for k, v in paramdict.items():
+                    params.create_dataset(k, data=np.array(v))
+    
+                # State of simulation
+                state = f.create_group('state')
+                state.create_dataset('tstep', data = [self.tstep],maxshape=(None,),chunks=True)
+                state.create_dataset('time', data = [self.t],maxshape=(None,),chunks=True)
+                state.create_dataset('z', data = [self.z],maxshape=(None,np.shape(self.z)[0],np.shape(self.z)[1]),chunks=True)
+                state.create_dataset('e', data = [self.e],maxshape=(None,np.shape(self.e)[0],np.shape(self.e)[1]),chunks=True)
+                state.create_dataset('p', data = [self.p],maxshape=(None,np.shape(self.p)[0],np.shape(self.p)[1]),chunks=True)
+                state.create_dataset('dx', data = [self.dx],maxshape=(None,np.shape(self.dx)[0],np.shape(self.dx)[1]),chunks=True)
+
+            else:
+                f = h5py.File(fname,'a')
+                state = f['state']
+                state['tstep'].resize((state['tstep'].shape[0] + 1), axis = 0)
+                state['tstep'][-1:] = [self.tstep]
+                state['time'].resize((state['time'].shape[0] + 1), axis = 0)
+                state['time'][-1:] = [self.t]
+                state['z'].resize((state['z'].shape[0] + 1), axis = 0)
+                state['z'][-1:] = [self.z]
+                state['e'].resize((state['e'].shape[0] + 1), axis = 0)
+                state['e'][-1:] = [self.e]
+                state['p'].resize((state['p'].shape[0] + 1), axis = 0)
+                state['p'][-1:] = [self.p]
+                state['dx'].resize((state['dx'].shape[0] + 1), axis = 0)
+                state['dx'][-1:] = [self.dx]
 
         f.close()
         return
 
-    def export_scalars(self,odir,data,restart=False):
+    def export_scalars(self,odir,data,overwrite=True):
         """
         Inputs: 
          - odir (output directory)
          - data (data, based on appending self.get_scalars() in loop)
-         - restart (=False by default), if True, then appends to the currently
-         existing file. 
+         - overwrite (=True by default), if True, then regardless 
+        of if there is already a file there or not, it'll overwrite that file. 
+        Otherwise, it'll append to the currently existing file
 
         Exports self.export_name()+'.h5' file, which contains two groups: 
             1) 'parameters' (depends on the mode)
@@ -388,9 +412,8 @@ class ez():
         into directory 'odir'.
         """
         fname = odir+ self.export_name() +'_scalars.h5'
-        f = h5py.File(fname,'a')
-
-        if not restart:
+        if not path.exists(fname):
+            f = h5py.File(fname,'w')
             # Parameters
             params = f.create_group('parameters')
             for k, v in self.get_params().items():
@@ -400,10 +423,21 @@ class ez():
             for ii,d in enumerate(np.array(data).T):
                 scalars.create_dataset(self.okeys[ii],data=np.array(d))
         
-        elif restart:
-            for ii,d in enumerate(np.array(data).T):
-                del f['scalars'][self.okeys[ii]]
-                f['scalars'][self.okeys[ii]] = np.array(d)
+        else:
+            if overwrite:
+                f = h5py.File(fname,'w')
+                params = f.create_group('parameters')
+                for k, v in self.get_params().items():
+                    params.create_dataset(k, data=np.array(v))
+
+                scalars = f.create_group('scalars')
+                for ii,d in enumerate(np.array(data).T):
+                    scalars.create_dataset(self.okeys[ii],data=np.array(d))
+            else:
+                f = h5py.File(fname,'a')
+                for ii,d in enumerate(np.array(data).T):
+                    del f['scalars'][self.okeys[ii]]
+                    f['scalars'][self.okeys[ii]] = np.array(d)
 
         f.close()
         return
