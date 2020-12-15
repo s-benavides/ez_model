@@ -22,5 +22,4 @@ minicondahome="/home/santiago_b/miniconda3"
 conda activate ez
 
 # Run scripts
-python3 main_q.py -odir test_q/ -idir test_q/ & # Add '-overwrite 0' to continue running from last output.
-python3 main_f.py -f 0.01 -odir test_f/ -idir test_f/ 
+mpiexec -n 2 python3 main_q_parallel.py
