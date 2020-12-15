@@ -3,6 +3,7 @@ Parameter file for ez_model.
 """
 import sys
 import numpy as np
+import os
 
 # Set parameters
 
@@ -44,6 +45,7 @@ idir = './'
 # Output directory
 odir = './'
 
+
 """
 Additions below by Adeline Hillier
 
@@ -73,3 +75,8 @@ for i in range(1,len(sys.argv),2):
         raise Exception('Parameter does not exist.')
 
 slope = mult*slope_c
+
+if not os.path.exists(idir):
+    os.makedirs(idir)
+if not os.path.exists(odir):
+    os.makedirs(odir)
