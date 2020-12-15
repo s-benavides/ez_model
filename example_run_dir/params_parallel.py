@@ -24,7 +24,7 @@ Ny = 20
 skipmax = 2
 
 # Main input parameter: number of grains dropped at one end of the domain per time step.
-q_ins = np.logspace(-3,np.log10(5),4)
+q_ins = np.logspace(-3,np.log10(5),5)
 if len(q_ins)!=size:
     print("ERROR: number of q's must match the number of cores!")
 

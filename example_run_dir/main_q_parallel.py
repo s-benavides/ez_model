@@ -8,7 +8,7 @@ from mpi4py import MPI
 
 rank = MPI.Get_rank()
 
-from params import *
+from params_parallel import *
 
 # Process decides which directories and parameter values to work on:
 q_in = q_ins[rank]
