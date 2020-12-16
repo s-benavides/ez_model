@@ -692,7 +692,7 @@ class set_q(ez):
         # If q_in < 1, then we drop 1 bead every 1/q_in time steps.
         self.q_in_temp = 0
         if (self.q_in <= 1)&(self.q_in>0):
-            if self.t % int(1/self.q_in) == 0:
+            if self.tstep % int(1/self.q_in) == 0:
                 indsfull = np.transpose(np.where(~self.ep))
                 indlist = indsfull[(indsfull[:,1]>0)&(indsfull[:,1]<6)]
                 indn = np.random.choice(len(indlist),1,replace=False)
