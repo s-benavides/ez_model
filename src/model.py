@@ -8,7 +8,7 @@ from os import path
 
 class ez():
     
-    def __init__(self,Nx,Ny,c_0,f,skipmax,dt=22.14,rho = 1.6,initial=0.0):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,dt=22.14,rho = 0.8,initial=0.0):
         """
         Initialize the model
         Parameters for ez superclass
