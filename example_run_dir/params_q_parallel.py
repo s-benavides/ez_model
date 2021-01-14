@@ -18,14 +18,14 @@ c_0 = 0.2
 f = 0.0
 
 # Size of domain
-Nx = 100
-Ny = 20
+Nx = 400
+Ny = 80
 
 # Average lattice sites hopped over by grain in motion
-skipmax = 2
+skipmax = 3
 
 # Main input parameter: number of grains dropped at one end of the domain per time step.
-q_ins = np.logspace(-3,np.log10(5),4)
+q_ins = np.logspace(-1,1,16)
 if len(q_ins)!=size:
     print("ERROR: number of q's must match the number of cores!")
 
@@ -36,14 +36,20 @@ slope = mult*slope_c
 
 # Quick estimate of how many time steps to take to build the bed
 N = (Nx*slope_c)*Nx*0.5*Ny #total number of beads in 'expected' bed
-T = N/q_ins[rank] # total number of time-steps necessary to build that bed is going to N (particles)/q_in (particles/time step)
+# T = N/q_ins[rank] # total number of time-steps necessary to build that bed is going to N (particles)/q_in (particles/time step)
 
 # Max iteration number:
-# T = int(5*T) # so that we build the bed and also have a reasonable steady state
-T = 100 # Otherwise set manually
+# T = int(10*T) # so that we build the bed and also have a reasonable steady state
+# T = 100 # Otherwise set manually
+H = 5 # Choose number of hours to run (real time) NOTE: anything more than 5 hours tends to give memory issues
 
 # Iteration per state save:
-iter_state = 1e14 #int(T/4) # Save during the loop, if you want. Otherwise, a final output is always saved.
+#iter_state = int(T/4) # Save during the loop, if you want. Otherwise, a final output is always saved.
+NS = 4 # Choose number of state saves per run
+
+NSc = 250 #100 # Choose number of bins to average the scalar data over that period! 
+#NSc = np.nan
+# NOTE: If you don't want to average and want to save every tstep, just make NSc = np.nan 
 
 # Are we continuing from a previous run?
 overwrite = bool(1) # 1 if starting a new run, 0 if continuing from previous save. 
@@ -52,7 +58,7 @@ overwrite = bool(1) # 1 if starting a new run, 0 if continuing from previous sav
 idirs = []
 for q in q_ins:
     qstr = ("%e" % q).replace(".", "d")
-    dirname = './q_in_'+qstr+'/'
+    dirname = './q_'+qstr+'/'
     idirs.append(dirname)
     # Root process makes the directory if it doesn't already exist
     if rank==0:
