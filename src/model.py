@@ -8,7 +8,7 @@ from os import path
 
 class ez():
     
-    def __init__(self,Nx,Ny,c_0,f,skipmax,dt=22.14,rho = 1.6,initial=0.0):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,dt=22.14,rho = 0.8,initial=0.0):
         """
         Initialize the model
         Parameters for ez superclass
@@ -618,7 +618,7 @@ class set_q(ez):
 
     (see __init__ help for more info on parameters.)
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,q_in,dt=22.14,rho=1.6,initial=0.0):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,q_in,dt=22.14,rho=0.8,initial=0.0):
         """
         Initialize the model
         Parameters for set_q subclass
@@ -792,7 +792,7 @@ class set_f(ez):
     In this model, the main input parameter is f, which is the probability that extreme events in fluid stresses entrain a grain and move it downstream.
     The entrained grains flow out of one end and, importantly, come back into the other end: this mode has periodic boundary conditions in all directions.
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,dt=22.14,rho=1.6,initial=0.01):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,dt=22.14,rho=0.8,initial=0.01):
         """
         Initialize the model
         Parameters for set_f subclass
