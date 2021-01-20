@@ -41,18 +41,18 @@ N = (Nx*slope_c)*Nx*0.5*Ny #total number of beads in 'expected' bed
 # Max iteration number:
 # T = int(10*T) # so that we build the bed and also have a reasonable steady state
 # T = 100 # Otherwise set manually
-H = 5 # Choose number of hours to run (real time) NOTE: anything more than 5 hours tends to give memory issues
+H = 11.9 # Choose number of hours to run (real time) NOTE: anything more than 5 hours tends to give memory issues
 
 # Iteration per state save:
 #iter_state = int(T/4) # Save during the loop, if you want. Otherwise, a final output is always saved.
 NS = 4 # Choose number of state saves per run
 
-NSc = 250 #100 # Choose number of bins to average the scalar data over that period! 
+NSc = 50 # Choose number of bins to average the scalar data over every hour of wall time. (To avoid memory issues, use this when waiting for the bed to build up)
 #NSc = np.nan
 # NOTE: If you don't want to average and want to save every tstep, just make NSc = np.nan 
 
 # Are we continuing from a previous run?
-overwrite = bool(1) # 1 if starting a new run, 0 if continuing from previous save. 
+overwrite = bool(0) # 1 if starting a new run, 0 if continuing from previous save. 
 
 # Input directory
 idirs = []

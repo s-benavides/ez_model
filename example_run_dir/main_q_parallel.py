@@ -5,6 +5,7 @@ import numpy as np
 import h5py
 import time
 from mpi4py import MPI
+from scipy.stats import binned_statistic
 
 from os import path
 
@@ -25,10 +26,10 @@ else:
     log = open(odir+'log.txt','a')
 sys.stdout = log
 
-print(str({'Nx':Nx, 'Ny':Ny, 'c_0':c_0, 'f':f, 'skipmax':skipmax, 'q_in':q_in,'slope':slope,'H':H,'NS':NS,'NSc':NSc,'overwrite':overwrite,'idir':idir,'odir':odir,'rank':rank}))
+print(str({'Nx':Nx, 'Ny':Ny, 'c_0':c_0, 'f':f, 'skipmax':skipmax, 'q_in':q_in,'slope':slope,'H':H,'NS':NS,'NSc':NSc,'overwrite':overwrite,'idir':idir,'odir':odir,'rank':rank}),flush=True)
 
 # Initialize
-print('Initializing... Mode: set_q (flume-like setup)')
+print('Initializing... Mode: set_q (flume-like setup)',flush=True)
 set_q = ez.set_q(Nx,Ny,c_0,f,skipmax,q_in)
 
 if not overwrite:
@@ -47,24 +48,27 @@ if not overwrite:
         
         odata = list(np.array(odata).T)
         f.close()
-        print("Adding to prevoius scalars file.")
+        print("Adding to previous scalars file.",flush=True)
     else:
-        print("Making new scalars file")
+        print("Making new scalars file",flush=True)
     
-    print('Continuing from previous run %s' % (idir+set_q.export_name()))
+    print('Continuing from previous run %s' % (idir+set_q.export_name()),flush=True)
 
 else:
     # Initialize scalar outputs:
     odata = []
     
-    print('Starting run from zero')
+    print('Starting run from zero',flush=True)
 
 # Main loop
 try:
-    print('Starting time-stepping loop, tstep = %s, time = %.4f' % (set_q.tstep,set_q.t))
+    print('Starting time-stepping loop, tstep = %s, time = %.4f' % (set_q.tstep,set_q.t),flush=True)
     start_time=time.time()
-    sim_end = time.time() + 60*60*H # run for H hours
+    sim_end = start_time + 60*60*H # run for H hours
+    # Wait two seconds to not trigger binning loop:
+    time.sleep(2)
     iter_start = set_q.tstep
+    tstep_bin = iter_start # To be changed every time a binned average occurs
 #    for i in range(T):
     while time.time() < sim_end:
         # Save the output every iter_state iterations during the run. All saved in one h5 file.
@@ -73,43 +77,77 @@ try:
         #if (i>0)&(set_q.tstep % int(iter_state) == 0):
         #if set_q.tstep % int(iter_state) == 0:
         if ((time.time()-start_time) % ((60*60*H)/NS)) < 1: # Save NS times per run
-            print('Saving state, tstep = %s, time = %.4f' % (set_q.tstep,set_q.t))
+            print('Saving state, tstep = %s, time = %.4f' % (set_q.tstep,set_q.t),flush=True)
             set_q.export_state(odir,overwrite=overwrite)
             time.sleep(1) # Avoids saving multiple times.
 
         # Add to the output scalars:
         odata.append(set_q.get_scalars())
+
+        # Bin data into NSc bins at every hour if NSc is not nan:
+        if (~np.isnan(NSc))&(((time.time()-start_time) % (60*60)) < 1):
+            print("Binning data. nbins = %s, tstep = %s, t = %s, wall_time = %s" % (NSc,set_q.tstep,set_q.t,time.time()-start_time),flush=True)
+            # Going to bin:
+            tstep = np.array(odata)[:,0]
+            t = np.array(odata)[:,1]
+            q = np.array(odata)[:,2]
+            qout = np.array(odata)[:,3]
+    
+            # Bin and average the data
+            tb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], t[tstep>tstep_bin], bins=NSc)
+            qb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], q[tstep>tstep_bin], bins=NSc)
+            qoutb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], qout[tstep>tstep_bin], bins=NSc)
+            tstepb = tstepb[:-1] + np.diff(tstepb)/2
+
+            # Join the binned time series to the previously binned one:
+            t = np.concatenate((t[tstep<=tstep_bin],tb))
+            q = np.concatenate((q[tstep<=tstep_bin],qb))
+            qout = np.concatenate((qout[tstep<=tstep_bin],qoutb))
+            tstep = np.concatenate((tstep[tstep<=tstep_bin],tstepb))
+
+            # Put it back into odata shape
+            odata = list(np.array([tstep,t,q,qout]).T)
             
+            time.sleep(1) # Avoids saving multiple times.
+
+            # Update tstep_bin
+            tstep_bin = set_q.tstep
+
         # Take a time-step in the model:
         set_q.step()
 
     iter_end = set_q.tstep
     end_time=time.time()
-    print('Finished time-stepping loop. Total real time: %.4f, iterations per second: %.4f.' % (end_time-start_time,(iter_end-iter_start)/(end_time-start_time)))
+    print('Finished time-stepping loop. Total real time: %.4f, iterations per second: %.4f.' % (end_time-start_time,(iter_end-iter_start)/(end_time-start_time)),flush=True)
 except:
     raise
 finally: 
     # Saving output
-    print('Saving final state and scalars, tstep = %s, time = %.4f' % (set_q.tstep,set_q.t))
+    print('Saving final state and scalars, tstep = %s, time = %.4f' % (set_q.tstep,set_q.t),flush=True)
     set_q.export_state(odir,overwrite=overwrite)
     # Save scalars at the end of the run:
-    if np.isnan(NSc):
-        # Save everything without binning
-        set_q.export_scalars(odir,odata,overwrite=overwrite) #If loading from previous run, make sure 'overwrite' is 0 (false), so it updates the same file.
-    else:
+    # If binning, one last bin before the save:
+    if (~np.isnan(NSc)):
+        print("Final binning of data. nbins = %s, tstep = %s, t = %s, wall_time = %s" % (NSc,set_q.tstep,set_q.t,time.time()-start_time),flush=True)
         # Going to bin:
-        from scipy.stats import binned_statistic
-        
+        tstep = np.array(odata)[:,0]
+        t = np.array(odata)[:,1]
+        q = np.array(odata)[:,2]
+        qout = np.array(odata)[:,3]
+
         # Bin and average the data
-        tstepb, tb, binnum = binned_statistic(np.array(odata)[:,0], np.array(odata)[:,1], bins=NSc)
-        qb, tb, binnum = binned_statistic(np.array(odata)[:,0], np.array(odata)[:,2], bins=NSc)
-        qoutb, tb, binnum = binned_statistic(np.array(odata)[:,0], np.array(odata)[:,3], bins=NSc)
-        tb = tb[:-1] + np.diff(tb)/2
-        
+        tb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], t[tstep>tstep_bin], bins=NSc)
+        qb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], q[tstep>tstep_bin], bins=NSc)
+        qoutb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], qout[tstep>tstep_bin], bins=NSc)
+        tstepb = tstepb[:-1] + np.diff(tstepb)/2
+
+        # Join the binned time series to the previously binned one:
+        t = np.concatenate((t[tstep<=tstep_bin],tb))
+        q = np.concatenate((q[tstep<=tstep_bin],qb))
+        qout = np.concatenate((qout[tstep<=tstep_bin],qoutb))
+        tstep = np.concatenate((tstep[tstep<=tstep_bin],tstepb))
+
         # Put it back into odata shape
-        odata = list(np.array([tb,tstepb,qb,qoutb]).T)
-        
-        # Save everything without binning
-        set_q.export_scalars(odir,odata,overwrite=overwrite) #If loading from previous run, make sure 'overwrite' is 0 (false), so it updates the same file.
-        
-    print('Finished saving. Exiting... \n \n')
+        odata = list(np.array([tstep,t,q,qout]).T)
+    set_q.export_scalars(odir,odata,overwrite=overwrite) #If loading from previous run, make sure 'overwrite' is 0 (false), so it updates the same file.
+    print('Finished saving. Exiting... \n \n',flush=True)
