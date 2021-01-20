@@ -19,7 +19,7 @@ class ez():
         f: probability of entraining due to fluid.
         skipmax: used to calculate bead jump length from binomial distribution with mean skipmax and variance skipmax/2.
         dt: dimensionless time between time-steps (used for calculating q*). Default = 22.14, based on dt_strobe = 0.5 s in real life.
-        rho: (rho_fluid / (rho_sediment - rho_fluid ))**(1/2) (used for calculating q*). Default = 1.6, based on glass spheres and water.
+        rho: (rho_fluid / (rho_sediment - rho_fluid ))**(1/2) (used for calculating q*). Default = 0.8, based on glass spheres and water.
         initial: initial condition -- all sites are activated with a probability equal to initial
         """
         ## Input parameters to be communicated to other functions:        
@@ -630,7 +630,7 @@ class set_q(ez):
         skipmax: used to calculate bead jump length from binomial distribution with mean skipmax and variance skipmax/2.
         q_in: number of entrained particles at top of the bed (flux in). Can be less than one but must be rational! q_in <= Ny!
         dt: dimensionless time between time-steps (used for calculating q*). Default = 22.14, based on dt_strobe = 0.5 s in real life.
-        rho: (rho_fluid / (rho_sediment - rho_fluid ))**(1/2) (used for calculating q*). Default = 1.6, based on glass spheres and water.
+        rho: (rho_fluid / (rho_sediment - rho_fluid ))**(1/2) (used for calculating q*). Default = 0.8, based on glass spheres and water.
         initial: initial condition -- all sites are activated with a probability equal to initial
         """
         super().__init__(Nx,Ny,c_0,f,skipmax,dt,rho,initial)
