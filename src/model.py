@@ -59,7 +59,7 @@ class ez():
         self.dx = self.dx_calc()
 
         ## Output keys:
-        self.okeys = ['tstep','time','bed_activity']
+        self.okeys = ['tstep','time','bed_activity','q_mid']
 
     #########################################
     ####       Dynamics and Calcs      ######
@@ -114,8 +114,22 @@ class ez():
         Calculates and returns the bed activity, the flux of grains in motion within the domain.
         Calculated away from the boundaries to avoid any issues.
         """
-        return np.sum(self.e[:,10:-2])/((self.Nx-12)*self.Ny)    
-    
+        return np.sum(self.e[:,10:-2])/((self.Nx-12)*self.Ny)   
+
+    ####################################################
+    # Calculates flux through the middle of the domain #
+    ####################################################
+    def q_mid_calc(self):
+        """
+        Calculates and returns the flux through the middle of the domain. 
+        Returns the number of grains that are active to the left of the half-way line, but whose dx is beyond it.
+        """
+        q_mid_temp = int(0)
+        for y,x in np.argwhere(self.e[:,:int(self.Nx/2)]):
+            if (self.dx[y,x] + x>=int(self.Nx/2)): # Only grains that are above the fixed bed_h barrier leave the domain
+                q_mid_temp += 1
+        return q_mid_temp   
+
     ######################
     # Update entrainment #
     ######################
@@ -303,9 +317,9 @@ class ez():
     
     def get_scalars(self):
         """
-        Get scalar outputs of model: returns [tstep, time, bed_activity]
+        Get scalar outputs of model: returns [tstep, time, bed_activity, q_mid]
         """
-        return [self.tstep,self.t,self.bed_activity()]
+        return [self.tstep,self.t,self.bed_activity(),self.q_mid_calc()]
     
     def set_state(self,data):
         """
@@ -656,7 +670,7 @@ class set_q(ez):
         self.q_tot_out = int(0)
 
         ## Output keys:
-        self.okeys = ['tstep','time','bed_activity','q_out']
+        self.okeys = ['tstep','time','bed_activity','q_mid','q_out']
 
     #########################################
     ####       Dynamics and Calcs      ######
@@ -783,9 +797,9 @@ class set_q(ez):
 
     def get_scalars(self):
         """
-        Get scalar outputs of model: returns [tstep, time, bed_activity,q_out]
+        Get scalar outputs of model: returns [tstep, time, bed_activity,q_mid,q_out]
         """
-        return [self.tstep,self.t,self.bed_activity(),self.q_out_calc()]
+        return [self.tstep,self.t,self.bed_activity(),self.q_mid_calc(),self.q_out_calc()]
 
 class set_f(ez):
     """
@@ -804,7 +818,7 @@ class set_f(ez):
         f_0: probability of entraining due to fluid.
         skipmax: used to calculate bead jump length from binomial distribution with mean skipmax and variance skipmax/2.
         dt: dimensionless time between time-steps (used for calculating q*). Default = 22.14, based on dt_strobe = 0.5 s in real life.
-        rho: (rho_fluid / (rho_sediment - rho_fluid ))**(1/2) (used for calculating q*). Default = 1.6, based on glass spheres and water.
+        rho: (rho_fluid / (rho_sediment - rho_fluid ))**(1/2) (used for calculating q*). Default = 0.8, based on glass spheres and water.
         initial: initial condition -- all sites are activated with a probability equal to initial
         """
         super().__init__(Nx,Ny,c_0,f,skipmax,dt,rho,initial)
@@ -818,7 +832,7 @@ class set_f(ez):
     ####################
     def step(self,bal=False,bed_feedback=True):     
         """
-        Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [dx,p,e,z,q_out].
+        Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [dx,p,e,z].
 
         Options:
         bal (= False by default): returns sum of active grains and grains in the bed, to check grain number conservation.
