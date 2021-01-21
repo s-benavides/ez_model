@@ -112,8 +112,9 @@ class ez():
     def bed_activity(self):
         """
         Calculates and returns the bed activity, the flux of grains in motion within the domain.
+        Calculated away from the boundaries to avoid any issues.
         """
-        return np.sum(self.e)/(self.Nx*self.Ny)    
+        return np.sum(self.e[:,10:-2])/((self.Nx-12)*self.Ny)    
     
     ######################
     # Update entrainment #
