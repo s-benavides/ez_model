@@ -91,22 +91,25 @@ try:
             tstep = np.array(odata)[:,0]
             t = np.array(odata)[:,1]
             q = np.array(odata)[:,2]
-            qout = np.array(odata)[:,3]
+            qmid = np.array(odata)[:,3]
+            qout = np.array(odata)[:,4]
     
             # Bin and average the data
             tb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], t[tstep>tstep_bin], bins=NSc)
             qb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], q[tstep>tstep_bin], bins=NSc)
+            qmidb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], qmid[tstep>tstep_bin], bins=NSc)
             qoutb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], qout[tstep>tstep_bin], bins=NSc)
             tstepb = tstepb[:-1] + np.diff(tstepb)/2
 
             # Join the binned time series to the previously binned one:
             t = np.concatenate((t[tstep<=tstep_bin],tb))
             q = np.concatenate((q[tstep<=tstep_bin],qb))
+            qmid = np.concatenate((qmid[tstep<=tstep_bin],qmidb))
             qout = np.concatenate((qout[tstep<=tstep_bin],qoutb))
             tstep = np.concatenate((tstep[tstep<=tstep_bin],tstepb))
 
             # Put it back into odata shape
-            odata = list(np.array([tstep,t,q,qout]).T)
+            odata = list(np.array([tstep,t,q,qmid,qout]).T)
             
             time.sleep(1) # Avoids saving multiple times.
 
@@ -133,21 +136,24 @@ finally:
         tstep = np.array(odata)[:,0]
         t = np.array(odata)[:,1]
         q = np.array(odata)[:,2]
-        qout = np.array(odata)[:,3]
+        qmid = np.array(odata)[:,3]
+        qout = np.array(odata)[:,4]
 
         # Bin and average the data
         tb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], t[tstep>tstep_bin], bins=NSc)
         qb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], q[tstep>tstep_bin], bins=NSc)
+        qmidb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], qmid[tstep>tstep_bin], bins=NSc)
         qoutb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], qout[tstep>tstep_bin], bins=NSc)
         tstepb = tstepb[:-1] + np.diff(tstepb)/2
 
         # Join the binned time series to the previously binned one:
         t = np.concatenate((t[tstep<=tstep_bin],tb))
         q = np.concatenate((q[tstep<=tstep_bin],qb))
+        qmid = np.concatenate((qmid[tstep<=tstep_bin],qmidb))
         qout = np.concatenate((qout[tstep<=tstep_bin],qoutb))
         tstep = np.concatenate((tstep[tstep<=tstep_bin],tstepb))
 
         # Put it back into odata shape
-        odata = list(np.array([tstep,t,q,qout]).T)
+        odata = list(np.array([tstep,t,q,qmid,qout]).T)
     set_q.export_scalars(odir,odata,overwrite=overwrite) #If loading from previous run, make sure 'overwrite' is 0 (false), so it updates the same file.
     print('Finished saving. Exiting... \n \n',flush=True)
