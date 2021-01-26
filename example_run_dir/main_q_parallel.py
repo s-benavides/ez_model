@@ -69,8 +69,9 @@ try:
     time.sleep(2)
     iter_start = set_q.tstep
     tstep_bin = iter_start # To be changed every time a binned average occurs
-#    for i in range(T):
-    while time.time() < sim_end:
+    # odata size control:
+    size_lim=True # Becomes false if odata is too large, stopping the time-stepping.
+    while (time.time() < sim_end)&(size_lim):
         # Save the output every iter_state iterations during the run. All saved in one h5 file.
         # If restarting, outputs will simply add on to the existing file.
         
@@ -115,6 +116,14 @@ try:
 
             # Update tstep_bin
             tstep_bin = set_q.tstep
+            
+        # Check size every 10 minutes (otherwise it reduces time-step):
+        if (((time.time()-start_time) % (60*10)) < 1):
+            odsize = np.array(odata).nbytes/1024**2
+            if odsize>180: # Memory limit is 180 MB
+                print("Odata reached it's maximum size of 180 MB, stopping.",flush=True)
+                size_lim=False
+            time.sleep(1) # Avoids checking multiple times.
 
         # Take a time-step in the model:
         set_q.step()
