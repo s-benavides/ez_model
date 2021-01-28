@@ -58,6 +58,9 @@ else:
     # Initialize scalar outputs:
     odata = []
     
+    # Build slope
+    set_q.z = set_q.build_bed(slope)
+
     print('Starting run from zero',flush=True)
 
 # Main loop
@@ -78,7 +81,7 @@ try:
         #if (i>0)&(set_q.tstep % int(iter_state) == 0):
         #if set_q.tstep % int(iter_state) == 0:
         if ((time.time()-start_time) % ((60*60*H)/NS)) < 1: # Save NS times per run
-            print('Saving state, tstep = %s, time = %.4f' % (set_q.tstep,set_q.t),flush=True)
+            print('Saving state, tstep = %s, t = %.4f, wall_time = %s' % (set_q.tstep,set_q.t,time.time()-start_time),flush=True)
             set_q.export_state(odir,overwrite=overwrite)
             time.sleep(1) # Avoids saving multiple times.
 
@@ -103,11 +106,11 @@ try:
             tstepb = tstepb[:-1] + np.diff(tstepb)/2
 
             # Join the binned time series to the previously binned one:
-            t = np.concatenate((t[tstep<=tstep_bin],tb))
-            q = np.concatenate((q[tstep<=tstep_bin],qb))
-            qmid = np.concatenate((qmid[tstep<=tstep_bin],qmidb))
-            qout = np.concatenate((qout[tstep<=tstep_bin],qoutb))
-            tstep = np.concatenate((tstep[tstep<=tstep_bin],tstepb))
+            t = np.concatenate((t[tstep<tstep_bin],tb))
+            q = np.concatenate((q[tstep<tstep_bin],qb))
+            qmid = np.concatenate((qmid[tstep<tstep_bin],qmidb))
+            qout = np.concatenate((qout[tstep<tstep_bin],qoutb))
+            tstep = np.concatenate((tstep[tstep<tstep_bin],tstepb))
 
             # Put it back into odata shape
             odata = list(np.array([tstep,t,q,qmid,qout]).T)
@@ -117,8 +120,8 @@ try:
             # Update tstep_bin
             tstep_bin = set_q.tstep
             
-        # Check size every 10 minutes (otherwise it reduces time-step):
-        if (((time.time()-start_time) % (60*10)) < 1):
+        # Check size every 11 minutes (otherwise it reduces time-step):
+        if (((time.time()-start_time) % (60*11)) < 1):
             odsize = np.array(odata).nbytes/1024**2
             if odsize>180: # Memory limit is 180 MB
                 print("Odata reached it's maximum size of 180 MB, stopping.",flush=True)
@@ -156,11 +159,11 @@ finally:
         tstepb = tstepb[:-1] + np.diff(tstepb)/2
 
         # Join the binned time series to the previously binned one:
-        t = np.concatenate((t[tstep<=tstep_bin],tb))
-        q = np.concatenate((q[tstep<=tstep_bin],qb))
-        qmid = np.concatenate((qmid[tstep<=tstep_bin],qmidb))
-        qout = np.concatenate((qout[tstep<=tstep_bin],qoutb))
-        tstep = np.concatenate((tstep[tstep<=tstep_bin],tstepb))
+        t = np.concatenate((t[tstep<tstep_bin],tb))
+        q = np.concatenate((q[tstep<tstep_bin],qb))
+        qmid = np.concatenate((qmid[tstep<tstep_bin],qmidb))
+        qout = np.concatenate((qout[tstep<tstep_bin],qoutb))
+        tstep = np.concatenate((tstep[tstep<tstep_bin],tstepb))
 
         # Put it back into odata shape
         odata = list(np.array([tstep,t,q,qmid,qout]).T)
