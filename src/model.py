@@ -557,7 +557,7 @@ class ez():
         n_frames = len(es)
         
         # create a figure with two subplots
-        fig = plt.figure(figsize=(4*float(self.Nx/self.Ny),4))
+        fig = plt.figure(figsize=(np.min((4*float(self.Nx/self.Ny),20)),4))
 
         # initialize two axes objects (one in each axes)
         im_e = plt.imshow(es[0],vmin=0,vmax=1,cmap='binary',aspect=1)#float(self.Ny/self.Nx))
