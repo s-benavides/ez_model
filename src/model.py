@@ -481,7 +481,7 @@ class ez():
         ax2.tick_params(axis='both',bottom=False,left=False)
         #
         meanz = np.mean(self.z[:,2:]-self.bed_h,axis=0)
-        ax3.plot(meanz,'.k')
+        ax3.plot(meanz,'-k')
         # x = np.arange(len(meanz))
         # ax3.plot(meanz[0]-np.sqrt(1/(9.*self.c_0)-1)*x,'--r')
         ax3.set_ylabel("Height")
