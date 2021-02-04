@@ -557,16 +557,16 @@ class ez():
         n_frames = len(es)
         
         # create a figure with two subplots
-        fig,ax=plt.subplots(3,1,figsize=(4*(self.Nx/self.Ny),4))
+        fig = plt.figure(figsize=(4*(self.Nx/self.Ny),4))
 
         # initialize two axes objects (one in each axes)
-        im_e = ax.imshow(es[0],vmin=0,vmax=1,cmap='binary',aspect=self.Nx/self.Ny)
+        im_e = plt.imshow(es[0],vmin=0,vmax=1,cmap='binary',aspect=self.Nx/self.Ny)
 
         # set titles and labels
-        ax.set_xticklabels([])
-        ax.set_yticklabels([])
-        ax.tick_params(axis='both',bottom=False,left=False)
-        ax.set_title("Entrainment Field")
+        plt.set_xticklabels([])
+        plt.set_yticklabels([])
+        plt.tick_params(axis='both',bottom=False,left=False)
+        plt.set_title("Entrainment Field")
         plt.tight_layout()
 
 
