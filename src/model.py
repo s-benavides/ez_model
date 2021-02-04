@@ -522,8 +522,91 @@ class ez():
         plt.show()
         return
         
-    def make_movie(self, t_steps, duration, odir,fps=24,name_add='',bed_feedback=True):
+    def make_e_movie(self, t_steps, duration, odir,fps=24,name_add='',bed_feedback=True):
         """
+        Makes movie of the entrainment field.
+        Takes t_steps number of time-steps from *current* state and exports a movie in 'odir' directory that is a maximum of 'duration' seconds long. 
+        Note that if the number of frames, in combination with the frames per second, makes a duration less than 20 seconds then it will be 1 fps and will last frames seconds long. 
+        You can also add to the end of the name with the command 'name_add=_(your name here)' (make sure to include the underscore).
+        """
+        # For saving
+        # import matplotlib as mpl
+        # matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        # Resets any externally exposed parameters for movie (otherwise movie might look weird)
+        plt.rcParams.update(plt.rcParamsDefault)  
+        import matplotlib.animation as animation
+        from matplotlib.animation import FFMpegWriter
+        from IPython.display import clear_output
+
+        # Calculate how many steps to skip before each save
+        dt_frame = np.max((int((t_steps)/(fps*duration)),1))
+        
+        ### Make the data:
+        es = [self.e]
+        dt = 0
+        for frame in tqdm.tqdm(range(t_steps)):
+            self.step(bed_feedback=bed_feedback)
+            dt+=1 
+            if dt % dt_frame ==0:
+                dt = 0
+                es.append(self.e)    
+               
+        es=np.array(es)
+
+        n_frames = len(es)
+        
+        # create a figure with two subplots
+        fig,ax=plt.subplots(3,1,figsize=(4*(self.Nx/self.Ny),4))
+
+        # initialize two axes objects (one in each axes)
+        im_e = ax.imshow(es[0],vmin=0,vmax=1,cmap='binary',aspect=self.Nx/self.Ny)
+
+        # set titles and labels
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
+        ax.tick_params(axis='both',bottom=False,left=False)
+        ax.set_title("Entrainment Field")
+        plt.tight_layout()
+
+
+        ### Animate function
+        def animate(frame):
+            """
+            Animation function. Takes the current frame number (to select the potion of
+            data to plot) and a plot object to update.
+            """
+            
+            print("Working on frame %s of %s" % (frame+1,len(es)))
+            clear_output(wait=True)
+            
+            im_e.set_array(es[frame])
+
+            return im_e
+
+        sim = animation.FuncAnimation(
+            # Your Matplotlib Figure object
+            fig,
+            # The function that does the updating of the Figure
+            animate,
+            # Frame information (here just frame number)
+            np.arange(n_frames),
+            # Extra arguments to the animate function
+            fargs=[],
+            # Frame-time in ms; i.e. for a given frame-rate x, 1000/x
+            interval=1000 / fps
+        )
+
+        # Try to set the DPI to the actual number of pixels you're plotting
+        writer = FFMpegWriter(fps=fps, metadata=dict(artist='Me'), bitrate=1800)
+        name = odir+self.export_name()+name_add+'.mp4'
+        sim.save(name, dpi=300, writer=writer)
+
+        return
+
+    def make_panel_movie(self, t_steps, duration, odir,fps=24,name_add='',bed_feedback=True):
+        """
+        Makes movie of entrainment field, y-averaged height, and bed activity. Note that the entrainment field's aspect ratio will be adjusted to fit.
         Takes t_steps number of time-steps from *current* state and exports a movie in 'odir' directory that is a maximum of 'duration' seconds long. 
         Note that if the number of frames, in combination with the frames per second, makes a duration less than 20 seconds then it will be 1 fps and will last frames seconds long. 
         You can also add to the end of the name with the command 'name_add=_(your name here)' (make sure to include the underscore).
@@ -566,7 +649,7 @@ class ez():
 
         # initialize two axes objects (one in each axes)
         im_e = ax1.imshow(es[0],vmin=0,vmax=1,cmap='binary',aspect=self.Nx/(5*self.Ny))
-        im_z, = ax2.plot(zs[-1],'.k')      
+        im_z, = ax2.plot(zs[-1],'-k')      
         im_q, = ax3.plot(np.zeros(len(qs)),'-k',lw=1)
 
         # set titles and labels
@@ -625,6 +708,7 @@ class ez():
 
         return
 
+    
 class set_q(ez):
     """
     This mode is set up to replicate experiments, where the grains are dropped in on one end at a fixed rate q_in, the main input parameter of this mode, 
