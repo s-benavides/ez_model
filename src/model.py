@@ -305,9 +305,9 @@ class ez():
  
     def get_state(self):
         """
-        Get current state of model: returns [z,e,p,dx,t,tstep]
+        Get current state of model: returns [tstep,t,z,e,p,dx]
         """
-        return [self.z,self.e,self.p,self.dx,self.t,self.tstep]
+        return [self.tstep,self.t,self.z,self.e,self.p,self.dx]
 
     def get_params(self):
         """
@@ -504,7 +504,7 @@ class ez():
         Plots all fields:
         """
         import matplotlib.pyplot as plt
-        out = self.get_state()[:-1] #[z,e,p,dx,t]
+        out = self.get_state()[:-2] #[tstep,t,z,e,p,dx]
         names = ['z','e','p','dx']
         for ii,field in enumerate(out):
             im=plt.imshow(field)
