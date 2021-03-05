@@ -114,7 +114,7 @@ class ez():
         Calculates and returns the bed activity, the flux of grains in motion within the domain.
         Calculated away from the boundaries to avoid any issues.
         """
-        return np.sum(self.e[:,10:-2])/((self.Nx-12)*self.Ny)   
+        return np.sum(self.e[:,1:-1])/((self.Nx-2)*self.Ny)   
 
     ####################################################
     # Calculates flux through the middle of the domain #
