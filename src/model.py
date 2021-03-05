@@ -72,17 +72,17 @@ class ez():
         """
         Calculates dx from binomial distribution with mean skipmax and variance skipmax/2. Returns dx.
         """            
-        dx = np.zeros((self.Ny,self.Nx),dtype=int)
+#         dx = np.zeros((self.Ny,self.Nx),dtype=int)
     
-        # So that the variance is self.skipmax/a
-        a = 2
-        p = (a-1)/a
-        n = self.skipmax/p
-        for i in range(self.Nx):
-            # dx[:,i]=np.random.randint(1,high=self.skipmax+1,size=(self.Ny))
-            dx[:,i]=np.random.binomial(n,p,size=self.Ny)
+#         # So that the variance is self.skipmax/a
+#         a = 2
+#         p = (a-1)/a
+#         n = self.skipmax/p
+#         for i in range(self.Nx):
+#             # dx[:,i]=np.random.randint(1,high=self.skipmax+1,size=(self.Ny))
+#             dx[:,i]=np.random.binomial(n,p,size=self.Ny)
 
-        return dx  
+        return np.ones((self.Ny,self.Nx),dtype=int)
         
     ###############################################
     # Calculating collision likelyhood based on z.#
