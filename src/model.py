@@ -151,101 +151,39 @@ class ez():
     #################
     # Update height #
     #################
-    def z_update(self,periodic=False,q_in_temp = 0):
+    def z_update(self,periodic=False):
         """
         Calculates and returns z, given e (pre-time-step) and ep (post-time-step) entrainment matrices. Does so in a way that conserves grains.
         """
-        if periodic:
-            z_temp = self.ghost_z()
-            
-            # Calculate total change in entrainment
-            dp = np.sum(self.ep)-np.sum(self.e)
-        else:
-            z_temp = np.copy(self.z)
-            
-            # Calculate total change in entrainment
-            dp = np.sum(self.ep)+self.q_out-np.sum(self.e)-q_in_temp
         
-        if dp<0:  #particle(s) deposited
-            # Add particles where e is True
-            inds = np.argwhere(self.e)
-            inds_dep = np.random.choice(len(inds),abs(dp),replace=False)
-            for ind in inds[inds_dep]:
-                y,x = ind
-                if periodic:
-                    x+=1 # Ghost cells have an extra column to the left
-                    minx = x-1
-                    maxx = x+1
-                else:
-                    minx = np.max((0,-1+x))
-                    maxx = np.min((self.Nx-1,1+x))
-
-                # Define "kernel" of where we're looking. Looks around +/- 1 in x and y for min value of z
-                tuples = np.array([
-                    [
-                        tuple(((-1+y)%self.Ny,minx)),
-                        tuple(((-1+y)%self.Ny,x)),
-                        tuple(((-1+y)%self.Ny,maxx))
-                    ],
-                    [
-                        tuple((y,minx)),
-                        tuple((y,x)),
-                        tuple((y,maxx))
-                    ],
-                    [
-                        tuple(((1+y)%self.Ny,minx)),
-                        tuple(((1+y)%self.Ny,x)),
-                        tuple(((1+y)%self.Ny,maxx))
-                    ],
-                    ])
-                temp= np.array([
-                    [
-                        z_temp[(-1+y)%self.Ny,minx],
-                        z_temp[(-1+y)%self.Ny,x],
-                        z_temp[(-1+y)%self.Ny,maxx]
-                    ],
-                    [
-                        z_temp[y,minx],
-                        z_temp[y,x],
-                        z_temp[y,maxx]
-                    ],
-                    [
-                        z_temp[(1+y)%self.Ny,minx],
-                        z_temp[(1+y)%self.Ny,x],
-                        z_temp[(1+y)%self.Ny,maxx]
-                    ],
-                    ])
-
-                if periodic:
-                    indm = np.unravel_index(np.argmin(temp, axis=None), temp.shape)
-                    y,x = tuple(tuples[indm])
-                    x+=-1 # Shifting x-axis so that 0 corresponds to first column of real z
-                    x = x%self.Nx # Periodic
-                    x += 1 # But adding 1 back so that in the end we take [:,1:Nx+1]
-                    indm = tuple([y,x])
-                else:
-                    indm = np.unravel_index(np.argmin(temp, axis=None), temp.shape)
-                    indm = tuple(tuples[indm])
-                z_temp[indm]+=1
-                
-        elif dp>0:  #particle(s) entrained
-            # Remove particles where ep is True
-            inds = np.argwhere(self.ep)
-            inds_dep = np.random.choice(len(inds),abs(dp),replace=False)
-            for ind in inds[inds_dep]:
-                if periodic:
-                    z_temp[:,1:][tuple(ind)]-=1 # Shifting so that the right places are taken away
-                else:
-                    z_temp[tuple(ind)]-=1
-                    
+        z_temp = np.copy(self.z)
+        
+        e_temp_s= np.sum(self.e,axis=0) # total number of active grains in each y at time t
+        ep_temp_s= np.sum(np.roll(self.ep,-1,axis=1),axis=0) # total number of active grains in each y+dx at time t+dt
+        
+        z_temp_s = e_temp_s - ep_temp_s # How many grains to deposit or take away from each row
+        
+        for x in np.argwhere(z_temp_s>0):
+            indlist = np.where(self.e[:,x])[0] # will deposit in e locations
+            indn = np.random.choice(len(indlist),z_temp_s[x],replace=False) # randomly pick these locations
+            ind = indlist[indn]
+            z_temp[ind,x] += 1  # deposit
+            
+        for x in np.argwhere(z_temp_s<0):
+            indlist = np.where(self.ep[:,x+1])[0] # will deposit in locations one downstream of ep
+            indn = np.random.choice(len(indlist),abs(z_temp_s[x]),replace=False)
+            ind = indlist[indn]
+            z_temp[ind,x] -= 1 # entrain
+                          
         # Sets any negative z to zero (although this should not happen...)
         if (z_temp<0).any():
             print("NEGATIVE Z!")
             print(np.where(z_temp<0))
         z_temp[z_temp<0] = 0
         
-        if periodic:
-            z_temp = z_temp[:,1:self.Nx+1]
+        if ~periodic:
+            # Set boundary condition
+            z_temp[:,-1] = 0
         
         return z_temp
     
