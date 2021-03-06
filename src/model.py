@@ -683,11 +683,11 @@ class set_q(ez):
         ## INITIAL fields ##
         ####################
         # We drop q_in number of grains (randomly) at the beginning.
-        indsfull = np.transpose(np.where(~self.e))
-        indlist = indsfull[(indsfull[:,1]>0)&(indsfull[:,1]<6)]
+        indlist = np.where(~self.e[:,0])[0] 
         indn = np.random.choice(len(indlist),max(int(self.q_in),1),replace=False)
-        ind = np.transpose(indlist[indn])
-        self.e[tuple(ind)]=True
+        ind = indlist[indn]
+        self.e[ind,0]=True
+
         ## Flux out:
         self.q_out = int(0)
         self.q_tot_out = int(0)
@@ -714,9 +714,6 @@ class set_q(ez):
             self.q_tot_out += self.q_out
             temp = np.sum(self.e)+np.sum(self.z)+self.q_tot_out
         
-        ## Recalculates dx randomly
-        self.dx = self.dx_calc() 
-        
         ## Calculates probabilities, given c, e, and dx
         self.p = self.p_calc()
         
@@ -725,38 +722,32 @@ class set_q(ez):
         
         ## Calculates q_out based on e[:,-skipmax:]
         self.q_out = self.q_out_calc() 
-        
-        ## We drop q_in number of grains (randomly) at the head of the flume.
-        # If q_in < 1, then we drop 1 bead every 1/q_in time steps.
-        self.q_in_temp = 0
-        if (self.q_in <= 1)&(self.q_in>0):
-            if self.tstep % int(1/self.q_in) == 0:
-                indsfull = np.transpose(np.where(~self.ep))
-                indlist = indsfull[(indsfull[:,1]>0)&(indsfull[:,1]<6)]
-                indn = np.random.choice(len(indlist),1,replace=False)
-                ind = np.transpose(indlist[indn])
-                self.ep[tuple(ind)]=True
-                self.q_in_temp = 1
-            else:
-                pass
-        elif self.q_in > 1:
-                indsfull = np.transpose(np.where(~self.ep))
-                indlist = indsfull[(indsfull[:,1]>0)&(indsfull[:,1]<6)]
-                indn = np.random.choice(len(indlist),int(self.q_in),replace=False)
-                ind = np.transpose(indlist[indn])
-                self.ep[tuple(ind)]=True
-                self.q_in_temp = int(self.q_in)
-        elif self.q_in==0:
-            self.q_in_temp = 0
-        else:
-            print("ERROR: check q_in value.")
-        
+                
         ## Update height, given e and ep.
         if bed_feedback:
-            self.z = self.z_update(q_in_temp = self.q_in_temp)
+            self.z = self.z_update()
         
         ## Copies and auxiliary entrainment matrix
         self.e = np.copy(self.ep)
+        
+        # We drop q_in number of grains (randomly) at the beginning.
+        if (self.q_in <= 1)&(self.q_in>0):
+            if self.tstep % int(1/self.q_in) == 0:
+                indlist = np.where(~self.e[:,0])[0] 
+                indn = np.random.choice(len(indlist),1,replace=False)
+                ind = indlist[indn]
+                self.e[ind,0]=True
+            else:
+                pass
+        elif self.q_in > 1: 
+            indlist = np.where(~self.e[:,0])[0] 
+            indn = np.random.choice(len(indlist),int(self.q_in),replace=False)
+            ind = indlist[indn]
+            self.e[ind,0]=True
+        elif self.q_in == 0:
+            pass
+        else:
+            print("ERROR: check q_in value.")
 
         ## Add to time:
         self.tstep += 1
