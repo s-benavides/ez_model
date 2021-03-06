@@ -834,9 +834,6 @@ class set_f(ez):
         bal (= False by default): returns sum of active grains and grains in the bed, to check grain number conservation.
         bed_feedback ( = True by default): if False, then the bed doesn't update and there is no feedback with the bed.
         """
-        
-        ## Recalculates dx randomly
-        self.dx = self.dx_calc() 
 
         ## Calculates probabilities, given c, e, and dx
         self.p = self.p_calc()
