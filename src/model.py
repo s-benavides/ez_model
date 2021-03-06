@@ -76,7 +76,7 @@ class ez():
         """    
         
         if self.dx[y,x]>0:
-            s = (z_t[(y+dy)%self.Ny,x+dx]-z_t[y,x])/np.sqrt(self.dx[y,x]**2+dy**2)
+            s = (z_t[(y+dy)%self.Ny,x+dx]-z_t[y,x])/self.dx[y,x]
         else:
             s =0.0
             
