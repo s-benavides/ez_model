@@ -56,7 +56,7 @@ class ez():
         
         ## Initiates calculations:
         # Jump lengths
-        self.dx = self.dx_calc()
+        self.dx = np.ones((self.Ny,self.Nx),dtype=int)
 
         ## Output keys:
         self.okeys = ['tstep','time','bed_activity','q_mid']
@@ -65,25 +65,7 @@ class ez():
     ####       Dynamics and Calcs      ######
     #########################################
         
-    #####################
-    # Calculation of dx #
-    #####################
-    def dx_calc(self):
-        """
-        Calculates dx from binomial distribution with mean skipmax and variance skipmax/2. Returns dx.
-        """            
-#         dx = np.zeros((self.Ny,self.Nx),dtype=int)
-    
-#         # So that the variance is self.skipmax/a
-#         a = 2
-#         p = (a-1)/a
-#         n = self.skipmax/p
-#         for i in range(self.Nx):
-#             # dx[:,i]=np.random.randint(1,high=self.skipmax+1,size=(self.Ny))
-#             dx[:,i]=np.random.binomial(n,p,size=self.Ny)
 
-        return np.ones((self.Ny,self.Nx),dtype=int)
-        
     ###############################################
     # Calculating collision likelyhood based on z.#
     ###############################################
