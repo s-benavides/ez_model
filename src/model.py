@@ -104,16 +104,11 @@ class ez():
     ####################################################
     # Calculates flux through the middle of the domain #
     ####################################################
-    def q_mid_calc(self):
+    def q_profile_calc(self):
         """
-        Calculates and returns the flux through the middle of the domain. 
-        Returns the number of grains that are active to the left of the half-way line, but whose dx is beyond it.
+        Calculates and returns the dimensionless flux profile as a function of x. Note that it is a one-dimensional array because we're summing over the y-direction and dividing by Ny.
         """
-        q_mid_temp = int(0)
-        for y,x in np.argwhere(self.e[:,:int(self.Nx/2)]):
-            if (self.dx[y,x] + x>=int(self.Nx/2)): 
-                q_mid_temp += 1
-        return q_mid_temp   
+        return np.sum(self.e,axis=0)/self.norm
 
     ######################
     # Update entrainment #
