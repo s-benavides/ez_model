@@ -41,8 +41,7 @@ class ez():
         ## INITIAL fields ##
         ####################
         ## Height. Start with z = bed_h everywhere. (to avoid negative values of z)
-        self.bed_h = 100
-        self.z = self.bed_h*np.ones((Ny,Nx),dtype=int)
+        self.z = np.zeroes((Ny,Nz),dtype=int)
         # Start with random number entrained
         A = np.random.rand(self.Ny,self.Nx)
         self.e = A<initial
@@ -210,7 +209,7 @@ class ez():
         x = np.arange(self.Nx)
         
         for i in range(self.Ny):
-            z_temp[i,:] = slope*(self.Nx-x)+self.bed_h-1
+            z_temp[i,:] = slope*(self.Nx-1-x)
 
         return z_temp
     
@@ -393,14 +392,14 @@ class ez():
         ax1.tick_params(axis='both',bottom=False,left=False)
         ax1.set_title("Entrainment Field")
         #
-        im = ax2.imshow(self.z[:,2:]-self.bed_h,vmin=0,vmax=np.max(self.z[:,2:]-self.bed_h),cmap=cm.Greens,aspect=self.Nx/(5*self.Ny))
+        im = ax2.imshow(self.z[:,2:],vmin=0,vmax=np.max(self.z[:,2:]),cmap=cm.Greens,aspect=self.Nx/(5*self.Ny))
         ax2.set_title("Height Field")
         fig.colorbar(im,ax=ax2,orientation='horizontal')
         ax2.set_xticklabels([])
         ax2.set_yticklabels([])
         ax2.tick_params(axis='both',bottom=False,left=False)
         #
-        meanz = np.mean(self.z[:,2:]-self.bed_h,axis=0)
+        meanz = np.mean(self.z[:,2:],axis=0)
         ax3.plot(meanz,'-k')
         # x = np.arange(len(meanz))
         # ax3.plot(meanz[0]-np.sqrt(1/(9.*self.c_0)-1)*x,'--r')
@@ -546,7 +545,7 @@ class ez():
         dt_frame = np.max((int((t_steps)/(fps*duration)),1))
         
         ### Make the data:
-        zs = [np.mean(self.z[:,2:]-self.bed_h,axis=0)]
+        zs = [np.mean(self.z[:,2:],axis=0)]
         es = [self.e]
         qs = [self.bed_activity()]
         dt = 0
@@ -556,7 +555,7 @@ class ez():
             dt+=1 
             if dt % dt_frame ==0:
                 dt = 0
-                zs.append(np.mean(self.z[:,2:]-self.bed_h,axis=0))
+                zs.append(np.mean(self.z[:,2:],axis=0))
                 es.append(self.e)    
                 
         zs=np.array(zs)
