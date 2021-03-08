@@ -57,6 +57,10 @@ class ez():
         # Jump lengths
         self.dx = np.ones((self.Ny,self.Nx),dtype=int)
 
+        # Important numbers
+        self.norm = self.Ny*self.dt*(3/4.)*np.pi**(-1)*self.rho
+        self.q8in = self.q_in / self.norm
+        
         ## Output keys:
         self.okeys = ['tstep','time','bed_activity','q_mid']
 
