@@ -54,8 +54,6 @@ class ez():
         self.tstep = int(0)             
         
         ## Initiates calculations:
-        # Jump lengths
-        self.dx = np.ones((self.Ny,self.Nx),dtype=int)
 
         # Important numbers
         self.norm = self.Ny*self.dt*(3/4.)*np.pi**(-1)*self.rho
@@ -78,10 +76,7 @@ class ez():
         Calculates and returns c, given slope with neighbors and c_0.
         """    
         
-        if self.dx[y,x]>0:
-            s = (z_t[(y+dy)%self.Ny,x+dx]-z_t[y,x])/self.dx[y,x]
-        else:
-            s =0.0
+        s = z_t[(y+dy)%self.Ny,x+dx]-z_t[y,x]
             
         # Setting c = 0 for any slope that is positive
         if s>0:
@@ -177,7 +172,7 @@ class ez():
         Returns the "ghost" z.
         """
         # How long do we extend for?
-        maxdx = np.max(np.arange(self.Nx)+self.dx) - self.Nx + 1
+        maxdx = np.max(np.arange(self.Nx)+1) - self.Nx + 1
 
         # Calculate the bed slope:
         xs = np.arange(self.Nx+maxdx+1)
@@ -223,9 +218,9 @@ class ez():
  
     def get_state(self):
         """
-        Get current state of model: returns [tstep,t,z,e,p,dx]
+        Get current state of model: returns [tstep,t,z,e,p]
         """
-        return [self.tstep,self.t,self.z,self.e,self.p,self.dx]
+        return [self.tstep,self.t,self.z,self.e,self.p]
 
     def get_params(self):
         """
@@ -241,10 +236,10 @@ class ez():
     
     def set_state(self,data):
         """
-        Set current state of model: input must be in format [tstep,t,z,e,p,dx]. To be used with 'load_data'. 
+        Set current state of model: input must be in format [tstep,t,z,e,p]. To be used with 'load_data'. 
         No need to use set_state unless you want to manually create a dataset.
         """
-        [self.tstep,self.t,self.z,self.e,self.p,self.dx] = data
+        [self.tstep,self.t,self.z,self.e,self.p] = data
         return
     
     def load_data(self,name):
@@ -258,7 +253,6 @@ class ez():
         self.z = f['state']['z'][-1]
         self.e = f['state']['e'][-1]
         self.p = f['state']['p'][-1]
-        self.dx = f['state']['dx'][-1]
         f.close()
 
         return 
@@ -272,7 +266,7 @@ class ez():
         Exports odir+ self.export_name() +'_state.h5' file, 
         which contains two groups: 
             1) 'parameters' (depends on the mode)
-            2) 'state' [tstep,t,z,e,p,dx]
+            2) 'state' [tstep,t,z,e,p]
         into directory 'odir'.
         """
         fname = odir+ self.export_name() +'_state.h5'
@@ -291,7 +285,6 @@ class ez():
             state.create_dataset('z', data = [self.z],maxshape=(None,np.shape(self.z)[0],np.shape(self.z)[1]),chunks=True)
             state.create_dataset('e', data = [self.e],maxshape=(None,np.shape(self.e)[0],np.shape(self.e)[1]),chunks=True)
             state.create_dataset('p', data = [self.p],maxshape=(None,np.shape(self.p)[0],np.shape(self.p)[1]),chunks=True)
-            state.create_dataset('dx', data = [self.dx],maxshape=(None,np.shape(self.dx)[0],np.shape(self.dx)[1]),chunks=True)
         else:
             if overwrite:
                 f = h5py.File(fname,'w')
@@ -308,8 +301,7 @@ class ez():
                 state.create_dataset('time', data = [self.t],maxshape=(None,),chunks=True)
                 state.create_dataset('z', data = [self.z],maxshape=(None,np.shape(self.z)[0],np.shape(self.z)[1]),chunks=True)
                 state.create_dataset('e', data = [self.e],maxshape=(None,np.shape(self.e)[0],np.shape(self.e)[1]),chunks=True)
-                state.create_dataset('p', data = [self.p],maxshape=(None,np.shape(self.p)[0],np.shape(self.p)[1]),chunks=True)
-                state.create_dataset('dx', data = [self.dx],maxshape=(None,np.shape(self.dx)[0],np.shape(self.dx)[1]),chunks=True)
+                state.create_dataset('p', data = [self.p],maxshape=(None,np.shape(self.p)[0],np.shape(self.p)[1]),chunks=True)[1]),chunks=True)
 
             else:
                 f = h5py.File(fname,'a')
@@ -324,8 +316,6 @@ class ez():
                 state['e'][-1:] = [self.e]
                 state['p'].resize((state['p'].shape[0] + 1), axis = 0)
                 state['p'][-1:] = [self.p]
-                state['dx'].resize((state['dx'].shape[0] + 1), axis = 0)
-                state['dx'][-1:] = [self.dx]
 
         f.close()
         return
@@ -422,12 +412,12 @@ class ez():
         Plots all fields:
         """
         import matplotlib.pyplot as plt
-        out = self.get_state()[:-2] #[tstep,t,z,e,p,dx]
-        names = ['z','e','p','dx']
+        out = self.get_state()[:-2] #[tstep,t,z,e,p]
+        names = ['z','e','p']
         for ii,field in enumerate(out):
             im=plt.imshow(field)
             plt.title("%s" % names[ii])
-            if names[ii] in ['z','p','dx']:
+            if names[ii] in ['z','p']:
                 plt.colorbar(im)
             plt.show()
 
@@ -678,7 +668,7 @@ class set_q(ez):
     ####################
     def step(self,bal=False,bed_feedback=True):     
         """
-        Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [dx,p,e,z,q_out].
+        Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [p,e,z,q_out].
 
         Options:
         bal (= False by default): returns sum of active grains, grains in the bed, and grains that left the domain to check grain number conservation.
@@ -707,7 +697,7 @@ class set_q(ez):
         else:
             print("ERROR: check q_in value.")
         
-        ## Calculates probabilities, given c, e, and dx
+        ## Calculates probabilities, given c and e
         self.p = self.p_calc()
         
         ## Update new (auxiliary) entrainment matrix, given only p
@@ -738,7 +728,7 @@ class set_q(ez):
     ###########################
     def p_calc(self):
         """
-        Calculates and returns probability matrix, given c,e, and dx.
+        Calculates and returns probability matrix, given c and e.
         """
         # Set A (what will be the probability matrix) to zero:
         p_temp = self.f*np.ones((self.Ny,self.Nx)) # Every grid point starts with some small finite probability of being entrained by fluid
@@ -746,10 +736,10 @@ class set_q(ez):
         # Define probabilities of entrainment based on previous e and c matrix.
         # Periodic boundary conditions in y-direction!
         for y,x in np.argwhere(self.e):
-            if (self.dx[y,x] + x)<=self.Nx-1:  # Not counting things that went outside
-                p_temp[y,x+self.dx[y,x]]   += self.c_calc(self.z,y,x,0,self.dx[y,x])
-                p_temp[(y+1)%self.Ny,x+self.dx[y,x]] += self.c_calc(self.z,y,x,1,self.dx[y,x])
-                p_temp[(y-1)%self.Ny,x+self.dx[y,x]] += self.c_calc(self.z,y,x,-1,self.dx[y,x])
+            if x<(self.Nx-1):  # Not counting things that went outside
+                p_temp[y,x+1]   += self.c_calc(self.z,y,x,0,1)
+                p_temp[(y+1)%self.Ny,x+1] += self.c_calc(self.z,y,x,1,1)
+                p_temp[(y-1)%self.Ny,x+1] += self.c_calc(self.z,y,x,-1,1)
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
@@ -813,14 +803,14 @@ class set_f(ez):
     ####################
     def step(self,bal=False,bed_feedback=True):     
         """
-        Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [dx,p,e,z].
+        Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [p,e,z].
 
         Options:
         bal (= False by default): returns sum of active grains and grains in the bed, to check grain number conservation.
         bed_feedback ( = True by default): if False, then the bed doesn't update and there is no feedback with the bed.
         """
 
-        ## Calculates probabilities, given c, e, and dx
+        ## Calculates probabilities, given c and e
         self.p = self.p_calc()
 
         ## Update new (auxiliary) entrainment matrix, given only p
@@ -847,7 +837,7 @@ class set_f(ez):
     ###########################
     def p_calc(self):
         """
-        Calculates and returns probability matrix, given c,e, and dx.
+        Calculates and returns probability matrix, given c and e.
         """
         # Set A (what will be the probability matrix) to zero:
         p_temp = self.f*np.ones((self.Ny,self.Nx)) # Every grid point starts with some small finite probability of being entrained by fluid
@@ -858,9 +848,9 @@ class set_f(ez):
         # Add probabilities of entrainment based on previous e and c matrix.
         # Periodic boundary conditions in both x and y-direction!
         for y,x in np.argwhere(self.e):
-            p_temp[y,(x+self.dx[y,x])%self.Nx]   += self.c_calc(z_t,y,x,0,self.dx[y,x])
-            p_temp[(y+1)%self.Ny,(x+self.dx[y,x])%self.Nx] += self.c_calc(z_t,y,x,1,self.dx[y,x])
-            p_temp[(y-1)%self.Ny,(x+self.dx[y,x])%self.Nx] += self.c_calc(z_t,y,x,-1,self.dx[y,x])
+            p_temp[y,(x+1)%self.Nx]   += self.c_calc(z_t,y,x,0,1)
+            p_temp[(y+1)%self.Ny,(x+1)%self.Nx] += self.c_calc(z_t,y,x,1,1)
+            p_temp[(y-1)%self.Ny,(x+1)%self.Nx] += self.c_calc(z_t,y,x,-1,1)
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
