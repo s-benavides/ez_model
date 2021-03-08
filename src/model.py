@@ -770,11 +770,7 @@ class set_q(ez):
         """
         Calculates and returns q_out, the number of grains leaving the domain.
         """
-        q_out_temp = int(0)
-        for y,x in np.argwhere(self.e):
-            if ((self.dx[y,x] + x>self.Nx-1)&(self.z[y,x]>self.bed_h)): 
-                q_out_temp += 1
-        return q_out_temp    
+        return np.sum(self.e[:,-1])    
 
     ##########
     # Extras #
