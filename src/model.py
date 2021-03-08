@@ -40,7 +40,7 @@ class ez():
         ####################
         ## INITIAL fields ##
         ####################
-        ## Height. Start with z = bed_h everywhere. (to avoid negative values of z)
+        ## Height. Start with z = 0 everywhere.
         self.z = np.zeroes((Ny,Nz),dtype=int)
         # Start with random number entrained
         A = np.random.rand(self.Ny,self.Nx)
@@ -107,7 +107,7 @@ class ez():
         """
         q_mid_temp = int(0)
         for y,x in np.argwhere(self.e[:,:int(self.Nx/2)]):
-            if (self.dx[y,x] + x>=int(self.Nx/2)): # Only grains that are above the fixed bed_h barrier leave the domain
+            if (self.dx[y,x] + x>=int(self.Nx/2)): 
                 q_mid_temp += 1
         return q_mid_temp   
 
@@ -759,11 +759,7 @@ class set_q(ez):
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
-        
-        # Entrain grains that are standing above the 'barrier':
-        inds = np.where(self.z[:,-1]>self.bed_h)[0]
-        p_temp[inds,-1]=1.0
-        
+                
         return p_temp
 
     
@@ -776,7 +772,7 @@ class set_q(ez):
         """
         q_out_temp = int(0)
         for y,x in np.argwhere(self.e):
-            if ((self.dx[y,x] + x>self.Nx-1)&(self.z[y,x]>self.bed_h)): # Only grains that are above the fixed bed_h barrier leave the domain
+            if ((self.dx[y,x] + x>self.Nx-1)&(self.z[y,x]>self.bed_h)): 
                 q_out_temp += 1
         return q_out_temp    
 
