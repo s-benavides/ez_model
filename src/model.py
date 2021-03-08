@@ -651,7 +651,7 @@ class set_q(ez):
         rho: (rho_fluid / (rho_sediment - rho_fluid ))**(1/2) (used for calculating q*). Default = 0.8, based on glass spheres and water.
         initial: initial condition -- all sites are activated with a probability equal to initial
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,dt,rho,initial)
+        super().__init__(Nx,Ny,c_0,f,skipmax,dt=dt,rho = rho,initial=initial)
         ## Input parameters to be communicated to other functions:        
         if q_in>Ny:
             print("q_in > Ny ! Setting q_in = Ny.")
@@ -662,12 +662,6 @@ class set_q(ez):
         ####################
         ## INITIAL fields ##
         ####################
-        # We drop q_in number of grains (randomly) at the beginning.
-        indlist = np.where(~self.e[:,0])[0] 
-        indn = np.random.choice(len(indlist),max(int(self.q_in),1),replace=False)
-        ind = indlist[indn]
-        self.e[ind,0]=True
-
         ## Flux out:
         self.q_out = int(0)
         self.q_tot_out = int(0)
@@ -690,25 +684,9 @@ class set_q(ez):
         bal (= False by default): returns sum of active grains, grains in the bed, and grains that left the domain to check grain number conservation.
         bed_feedback ( = True by default): if False, then the bed doesn't update and there is no feedback with the bed.
         """
-        if bal:
-            self.q_tot_out += self.q_out
-            temp = np.sum(self.e)+np.sum(self.z)+self.q_tot_out
-        
-        ## Calculates probabilities, given c, e, and dx
-        self.p = self.p_calc()
-        
-        ## Update new (auxiliary) entrainment matrix, given only p
-        self.ep = self.e_update() 
-        
-        ## Calculates q_out based on e[:,-skipmax:]
-        self.q_out = self.q_out_calc() 
-                
-        ## Update height, given e and ep.
-        if bed_feedback:
-            self.z = self.z_update()
         
         ## Copies and auxiliary entrainment matrix
-        self.e = np.copy(self.ep)
+        self.e = np.copy(self.ep)      
         
         # We drop q_in number of grains (randomly) at the beginning.
         if (self.q_in <= 1)&(self.q_in>0):
@@ -728,11 +706,28 @@ class set_q(ez):
             pass
         else:
             print("ERROR: check q_in value.")
-
+        
+        ## Calculates probabilities, given c, e, and dx
+        self.p = self.p_calc()
+        
+        ## Update new (auxiliary) entrainment matrix, given only p
+        self.ep = self.e_update() 
+        
+        ## Calculates q_out based on e[:,-skipmax:]
+        self.q_out = self.q_out_calc() 
+                
+        ## Update height, given e and ep.
+        if bed_feedback:
+            self.z = self.z_update()
+              
         ## Add to time:
         self.tstep += 1
         self.t     += self.dt
 
+        if bal:
+            self.q_tot_out += self.q_out
+            temp = np.sum(self.e)+np.sum(self.z)+self.q_tot_out
+        
         if bal:
             return temp
         else:
