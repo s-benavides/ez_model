@@ -232,7 +232,7 @@ class ez():
         """
         Get scalar outputs of model: returns [tstep, time, bed_activity, q_mid]
         """
-        return [self.tstep,self.t,self.bed_activity(),self.q_mid_calc()]
+        return [self.tstep,self.t,self.bed_activity(),self.q_profile_calc()[int(self.Nx/2)]]
     
     def set_state(self,data):
         """
@@ -770,7 +770,7 @@ class set_q(ez):
         """
         Get scalar outputs of model: returns [tstep, time, bed_activity,q_mid,q_out]
         """
-        return [self.tstep,self.t,self.bed_activity(),self.q_mid_calc(),self.q_out_calc()]
+        return [self.tstep,self.t,self.bed_activity(),self.q_profile_calc()[int(self.Nx/2)],self.q_out_calc()]
 
 class set_f(ez):
     """
