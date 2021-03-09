@@ -75,22 +75,28 @@ class ez():
     # Calculating collision likelyhood based on z.#
     ###############################################
     # c_0     = collision coefficient at zero slope.
-    def c_calc(self,z_t,y,x,dy,dx):
+    def c_calc(self,rolly,periodic=False):
         """
         Calculates and returns c, given slope with neighbors and c_0.
         """    
+        if periodic:
+            z_temp = self.ghost_z()
+        else:
+            z_temp = np.copy(self.z)
         
-        s = (z_t[(y+dy)%self.Ny,x+dx]-z_t[y,x])/self.skipmax 
+        s=(z_temp-np.roll(np.roll(z_temp,rolly,axis=0),1,axis = 1))/self.skipmax
         # skipmax for correct units: dz = grain radii, dx_h (grid points) = hop lengths in terms of grain radii = skipmax, so dz/dx_g (in grain radii) = dz/(skipmax*dx_h), but dx_h = 1. (note that this is different than self.dx which is different, and is normalized by domain size)
             
+        c_temp = self.c_0*np.sqrt(s**2+1)
         # Setting c = 0 for any slope that is positive
-        if s>0:
-            c_temp = 0
+        c_temp[s>0] = 0.0
+        
+        if periodic:
+            return c_temp[:,:-2]
         else:
-            c_temp = self.c_0*np.sqrt(s**2+1)
-        
-        return c_temp
-        
+            return c_temp
+
+
     ##################################
     # Calculates bed activity (flux) #
     ##################################
@@ -202,7 +208,7 @@ class ez():
         z_temp = np.copy(self.z)
         
         for i in range(self.Ny):
-            z_temp[i,:] = slope*(np.max(self.x)-self.x)*self.skipmax/self.dx
+            z_temp[i,:] = slope*(np.max(self.x)-self.x)*self.skipmax/self.dx + self.bed_h
 
         return z_temp
     
@@ -698,7 +704,9 @@ class set_q(ez):
         else:
             print("ERROR: check q_in value.")
             
-        if bal:
+        if bal:        
+            ## Calculates q_out based on e[:,-skipmax:]
+            self.q_out = self.q_out_calc() 
             self.q_tot_out += self.q_out
             temp = np.sum(self.e)+np.sum(self.z)+self.q_tot_out
         
@@ -707,10 +715,7 @@ class set_q(ez):
         
         ## Update new (auxiliary) entrainment matrix, given only p
         self.ep = self.e_update() 
-        
-        ## Calculates q_out based on e[:,-skipmax:]
-        self.q_out = self.q_out_calc() 
-                
+                   
         ## Update height, given e and ep.
         if bed_feedback:
             self.z = self.z_update()
@@ -734,17 +739,16 @@ class set_q(ez):
         """
         # Set A (what will be the probability matrix) to zero:
         p_temp = self.f*np.ones((self.Ny,self.Nx)) # Every grid point starts with some small finite probability of being entrained by fluid
-        
-        # Define probabilities of entrainment based on previous e and c matrix.
-        # Periodic boundary conditions in y-direction!
-        for y,x in np.argwhere(self.e):
-            if x<(self.Nx-1):  # Not counting things that went outside
-                p_temp[y,x+1]   += self.c_calc(self.z,y,x,0,1)
-                p_temp[(y+1)%self.Ny,x+1] += self.c_calc(self.z,y,x,1,1)
-                p_temp[(y-1)%self.Ny,x+1] += self.c_calc(self.z,y,x,-1,1)
+                
+        p_temp += self.c_calc(0)*np.roll(np.roll(self.e,0,axis=0),1,axis = 1)
+        p_temp += self.c_calc(1)*np.roll(np.roll(self.e,1,axis=0),1,axis = 1)
+        p_temp += self.c_calc(-1)*np.roll(np.roll(self.e,-1,axis=0),1,axis = 1)
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
+        
+        # Make sure upstream boundary conditions are met
+        p_temp[:,0]=0.0
                 
         return p_temp
 
