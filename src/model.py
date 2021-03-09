@@ -513,7 +513,7 @@ class ez():
 
         # Try to set the DPI to the actual number of pixels you're plotting
         writer = FFMpegWriter(fps=fps, metadata=dict(artist='Me'), bitrate=1800)
-        name = odir+self.export_name()+name_add+'.mp4'
+        name = odir+self.export_name()+name_add+'_e.mp4'
         sim.save(name, dpi=300, writer=writer)
 
         return
@@ -578,7 +578,7 @@ class ez():
         ax3.set_ylabel(r"Bed activity")
         ax3.set_xlabel(r"$t$")
         # ax3.axhline(y=self.q_in/self.Ny,ls='--',color='k')
-        ax3.set_ylim(0,np.max(qs))
+#         ax3.set_ylim(0,np.max(qs))
         ax3.set_xlim(0,t_steps)
         plt.tight_layout()
 
@@ -617,7 +617,7 @@ class ez():
 
         # Try to set the DPI to the actual number of pixels you're plotting
         writer = FFMpegWriter(fps=fps, metadata=dict(artist='Me'), bitrate=1800)
-        name = odir+self.export_name()+name_add+'.mp4'
+        name = odir+self.export_name()+name_add+'_panel.mp4'
         sim.save(name, dpi=300, writer=writer)
 
         return
@@ -799,6 +799,7 @@ class set_f(ez):
         initial: initial condition -- all sites are activated with a probability equal to initial
         """
         super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial)
+        print("WARNING: this model needs to be updated!! Namely: c_calc has changed, so ghost_z and p_calc need to be changed!!")
         
     #########################################
     ####       Dynamics and Calcs      ######
