@@ -13,11 +13,11 @@ class ez():
         Initialize the model
         Parameters for ez superclass
         ----------
-        Nx: number of gridpoints in x-direction. One gridpoint represents a hop-length distance. We normalize by the total size of the domain so that dx = 1/Nx.
+        Nx: number of gridpoints in x-direction. One gridpoint represents a grain diameter. We normalize by the total size of the domain so that dx = 1/Nx.
         Ny: number of gridpoints in y-direction
-        c_0: the KE of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). This number should not be greater than 1/3 (otherwise the whole bed would be washed away). c_0 = u_p^2 skipmax/(2*g*dx), with u_p being the dimensionless grain velocity, 'skipmax' is the hop length in number of grain diameters, g is the dimensionless gravity (scales like T^-1 as dt and dx --> 0), dx and dt are the dimensionless hop length and hop duration (normalized by the domain size L and time it takes for a disturbance to move down the whole bed T, respectively).
+        c_0: the KE of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). This number should not be greater than 1/3 (otherwise the whole bed would be washed away). c_0 = u_p^2/(2*g*dx), with u_p being the dimensionless grain velocity, g is the dimensionless gravity (scales like T^-1 as dt and dx --> 0), dx and dt are the dimensionless grain diameter and hop duration (normalized by the domain size L and time it takes for a disturbance to move down the whole bed T, respectively).
         f: probability of entraining due to fluid.
-        skipmax: hop length in terms of grain radii
+        skipmax: (average) hop length in terms of grain radii. Hop lengths are binomially distributed with a mean of skipmax. (See dx_calc function)
         u_p: nondimensional velocity of grains. Sets dt: dt = dx/u_p.
         rho: sqrt((rho_s-rho_w)/rho_w) = 1.25 based on experiments. 
         initial: initial condition -- all sites are activated with a probability equal to initial
@@ -25,6 +25,7 @@ class ez():
         ## Input parameters to be communicated to other functions:        
         self.Nx = int(Nx)
         self.Ny = int(Ny)
+        self.Xmesh,self.Ymesh = np.meshgrid(np.arange(self.Nx),np.arange(self.Ny)) 
         self.u_p = u_p
         self.skipmax = skipmax
         self.c_0 = c_0
@@ -40,7 +41,7 @@ class ez():
         ####################
         ## Height. Start with z = 0 everywhere.
 #         self.z = np.zeros((Ny,Nx),dtype=int) # Units of grain radii
-        self.bed_h = 10
+        self.bed_h = 100
         self.z = self.bed_h*np.ones((Ny,Nx),dtype=int) # Units of grain radii
         # Start with random number entrained
         A = np.random.rand(self.Ny,self.Nx)
@@ -55,13 +56,17 @@ class ez():
         
         # Other parameters
         self.x = np.linspace(0,1,self.Nx)
-        self.dx = np.diff(self.x)[0] # In units of *hop length*
-        self.dt = self.dx / self.u_p
-        self.g =  self.u_p**2 * self.skipmax / (2*self.c_0*self.dx)
-        self.Q = 0.75*np.pi**(-1)*self.rho*self.skipmax**(-0.5)*(self.g*self.dx)**(0.5)*self.dt
+        self.dx = np.diff(self.x)[0] # In units of grain diameters!
+        self.dt = self.skipmax*self.dx / self.u_p
+        self.g =  self.u_p**2 / (2*self.c_0*self.dx)
+        self.Q = 0.75*np.pi**(-1)*self.rho*(self.g*self.dx)**(0.5)*self.dt
         self.scrit = -np.sqrt((1/self.c_0)**2 - 1)
         self.norm = self.Ny*self.dt*(3/4.)*np.pi**(-1)*self.rho
         self.q8in = self.q_in / self.norm
+        
+        ## Initiates calculations:
+        # Hop lengths
+        self.dx_mat = self.dx_calc()
         
         ## Output keys:
         self.okeys = ['tstep','time','bed_activity','q_mid']
@@ -70,12 +75,33 @@ class ez():
     ####       Dynamics and Calcs      ######
     #########################################
         
+    #####################
+    # Calculation of dx #
+    #####################
+    def dx_calc(self):
+        """
+        Calculates dx from binomial distribution with mean skipmax and variance skipmax/2. Returns dx.
+        """            
+        dx = np.zeros((self.Ny,self.Nx),dtype=int)
+    
+        # So that the variance is self.skipmax/a
+        a = 2
+        p = (a-1)/a
+        n = self.skipmax/p
+        for i in range(self.Nx):
+            # dx[:,i]=np.random.randint(1,high=self.skipmax+1,size=(self.Ny))
+            dx[:,i]=np.random.binomial(n,p,size=self.Ny)
+
+        # No zero hop lengths values
+        dx[dx==0]=1
+                
+        return dx  
 
     ###############################################
     # Calculating collision likelyhood based on z.#
     ###############################################
     # c_0     = collision coefficient at zero slope.
-    def c_calc(self,rolly,periodic=False):
+    def c_calc(self,rollx,rolly,periodic=False):
         """
         Calculates and returns c, given slope with neighbors and c_0.
         """    
@@ -84,15 +110,14 @@ class ez():
         else:
             z_temp = np.copy(self.z)
         
-        s=(z_temp-np.roll(np.roll(z_temp,rolly,axis=0),1,axis = 1))/self.skipmax
-        # skipmax for correct units: dz = grain radii, dx_h (grid points) = hop lengths in terms of grain radii = skipmax, so dz/dx_g (in grain radii) = dz/(skipmax*dx_h), but dx_h = 1. (note that this is different than self.dx which is different, and is normalized by domain size)
+        s=(z_temp-np.roll(np.roll(z_temp,rolly,axis=0),rollx,axis = 1))/rollx
             
         c_temp = self.c_0*np.sqrt(s**2+1)
         # Setting c = 0 for any slope that is positive
         c_temp[s>0] = 0.0
         
         if periodic:
-            return c_temp[:,:-2]
+            return c_temp[:,1:self.Nx+1]
         else:
             return c_temp
 
@@ -105,7 +130,7 @@ class ez():
         Calculates and returns the bed activity, the flux of grains in motion within the domain.
         Calculated away from the boundaries to avoid any issues.
         """
-        return np.sum(self.e[:,1:-1])/((self.Nx-2)*self.Ny)   
+        return np.sum(self.e[:,5:-5])/((self.Nx-10)*self.Ny)   
 
     ####################################################
     # Calculates flux through the middle of the domain #
@@ -114,7 +139,7 @@ class ez():
         """
         Calculates and returns the dimensionless flux profile as a function of x. Note that it is a one-dimensional array because we're summing over the y-direction and dividing by Ny.
         """
-        return np.sum(self.e,axis=0)/self.norm
+        return np.sum(self.dx_mat*self.e,axis=0)/self.norm
 
     ######################
     # Update entrainment #
@@ -144,11 +169,37 @@ class ez():
         
         z_temp = np.copy(self.z)
         
-        e_temp_s= np.sum(self.e,axis=0) # total number of active grains in each y at time t
-        ep_temp_s= np.sum(np.roll(self.ep,-1,axis=1),axis=0) # total number of active grains in each y+dx at time t+dt
+        if periodic:
+            edom = np.copy(self.e)
+        else:
+            # Make sure to exclude points that leave the domain
+            dxexcl = self.e*self.dx_mat+self.Xmesh
+            edom = self.e*(dxexcl < self.Nx)
         
-        z_temp_s = e_temp_s - ep_temp_s # How many grains to deposit or take away from each row
-        
+        dxs = np.unique(self.dx_mat*edom)
+        z_temp_s = np.zeros(self.Nx,dtype=int)
+        eptemp_test = np.zeros(np.shape(self.e),dtype=int)
+        for rollx in dxs[dxs>0]:
+            etemp = edom*(self.dx_mat == rollx) # Only places where self.dx_mat == rollx
+            
+            matrow = np.zeros(np.shape(self.e))
+            matrow += np.roll(etemp,rollx,axis=1)
+            matrow += np.roll(np.roll(etemp,1,axis=0),rollx,axis=1)
+            matrow += np.roll(np.roll(etemp,-1,axis=0),rollx,axis=1)
+            matrow = np.array(matrow,dtype=bool)
+            
+            eptemp = self.ep*matrow
+            e_temp_s = np.sum(etemp,axis=0) # total number of active grains in each y at time t
+            ep_temp_s= np.sum(np.roll(eptemp,-rollx,axis=1),axis=0) # total number of active grains in each y+dx at time t+dt
+
+            eptemp_test += eptemp
+            # Take away the double-counted spots and add them to z_temp_s in the correct row.
+            z_temp_s += np.roll(np.sum((eptemp_test-1)*((eptemp_test-1)>0),axis=0),-rollx)  
+            # Reset the offset
+            eptemp_test[eptemp_test>1] = 1
+            
+            z_temp_s += e_temp_s - ep_temp_s # How many grains to deposit or take away from each row
+          
         for x in np.argwhere(z_temp_s>0):
             indlist = np.where(self.e[:,x])[0] # will deposit in e locations
             indn = np.random.choice(len(indlist),z_temp_s[x],replace=False) # randomly pick these locations
@@ -156,20 +207,20 @@ class ez():
             z_temp[ind,x] += 1  # deposit
             
         for x in np.argwhere(z_temp_s<0):
-            indlist = np.where(self.ep[:,x+1])[0] # will deposit in locations one downstream of ep
-            indn = np.random.choice(len(indlist),abs(z_temp_s[x]),replace=False)
+            indlist = np.where(self.ep[:,x[0]:x[0]+np.max(self.dx_mat)+1])[0] # will deposit in locations one downstream of ep
+            indlist = np.unique(indlist)
+            if len(indlist)<abs(z_temp_s[x][0]):
+                indlist= np.concatenate((indlist,np.random.choice(np.setdiff1d(np.arange(self.Ny),indlist),abs(z_temp_s[x][0])-len(indlist),replace=False)))
+            indn = np.random.choice(len(indlist),abs(z_temp_s[x][0]),replace=False)
             ind = indlist[indn]
             z_temp[ind,x] -= 1 # entrain
-                          
+        
         # Sets any negative z to zero (although this should not happen...)
         if (z_temp<0).any():
             print("NEGATIVE Z!")
             print(np.where(z_temp<0))
         z_temp[z_temp<0] = 0
-        
-        if ~periodic:
-            # Set boundary condition
-            z_temp[:,-1] = self.bed_h
+    
         
         return z_temp
     
@@ -182,22 +233,27 @@ class ez():
         The height of the extrapolated bed heights are calculated by a linear fit of the *entire* bed and then individual topographic features are added to those ghost points based on the difference between the real bed and the fit in the periodic locations.
         Returns the "ghost" z.
         """
-        # Calculate the bed slope:
-        xs = np.arange(self.Nx+2)
-        bed = np.mean(self.z,axis=0)
+        # How long do we extend for?
+        maxdx = np.max(np.arange(self.Nx)+self.dx_mat) - self.Nx + 1
 
-        # The true bed is now from 0 to Nx-1 in bed_f
-        m,b = np.polyfit(xs[:-2],bed,1)
-        bed_f = np.array(np.round(m*xs+b),dtype=int)
+        # Calculate the bed slope:
+        xs = np.arange(self.Nx+maxdx+1)
+        bed = np.mean(self.z,axis=0)
         
+        # The true bed is now from 1 to Nx in bed_f
+        m,b = np.polyfit(xs[(1<=xs)&(xs<=self.Nx)],bed,1)
+        bed_f = np.array(np.round(m*xs+b),dtype=int)
+
         # Calculate the pertrusion from the fit
-        z_diff = self.z[:,:2]-bed_f[:2]
+        z_diff = self.z[:,:maxdx]-bed_f[1:maxdx+1]
+        z_diff_t = self.z[:,-1]-bed_f[self.Nx]
 
         # Add the extra space
-        z_t = np.hstack((np.copy(self.z),np.zeros((self.Ny,2),dtype=int)))
+        z_t = np.hstack((np.zeros((self.Ny,1),dtype=int),np.copy(self.z),np.zeros((self.Ny,maxdx),dtype=int)))
 
         # Add the baseline extrapolated slope + the difference at each point
-        z_t[:,-2:] = bed_f[-2:]+z_diff
+        z_t[:,self.Nx+1:] = bed_f[self.Nx+1:]+z_diff
+        z_t[:,0] = bed_f[0]+z_diff_t
         
         return z_t
     
@@ -208,7 +264,7 @@ class ez():
         z_temp = np.copy(self.z)
         
         for i in range(self.Ny):
-            z_temp[i,:] = slope*(np.max(self.x)-self.x)*self.skipmax/self.dx + self.bed_h
+            z_temp[i,:] = slope*(np.max(self.x)-self.x)/self.dx + self.bed_h
 
         return z_temp
     
@@ -224,9 +280,9 @@ class ez():
  
     def get_state(self):
         """
-        Get current state of model: returns [tstep,t,z,e,p]
+        Get current state of model: returns [tstep,t,z,e,p,dx_mat]
         """
-        return [self.tstep,self.t,self.z,self.e,self.p]
+        return [self.tstep,self.t,self.z,self.e,self.p,self.dx_mat]
 
     def get_params(self):
         """
@@ -242,10 +298,10 @@ class ez():
     
     def set_state(self,data):
         """
-        Set current state of model: input must be in format [tstep,t,z,e,p]. To be used with 'load_data'. 
+        Set current state of model: input must be in format [tstep,t,z,e,p,dx_mat]. To be used with 'load_data'. 
         No need to use set_state unless you want to manually create a dataset.
         """
-        [self.tstep,self.t,self.z,self.e,self.p] = data
+        [self.tstep,self.t,self.z,self.e,self.p,self.dx_mat] = data
         return
     
     def load_data(self,name):
@@ -259,6 +315,7 @@ class ez():
         self.z = f['state']['z'][-1]
         self.e = f['state']['e'][-1]
         self.p = f['state']['p'][-1]
+        self.dx_mat = f['state']['dx_mat'][-1]
         f.close()
 
         return 
@@ -291,6 +348,7 @@ class ez():
             state.create_dataset('z', data = [self.z],maxshape=(None,np.shape(self.z)[0],np.shape(self.z)[1]),chunks=True)
             state.create_dataset('e', data = [self.e],maxshape=(None,np.shape(self.e)[0],np.shape(self.e)[1]),chunks=True)
             state.create_dataset('p', data = [self.p],maxshape=(None,np.shape(self.p)[0],np.shape(self.p)[1]),chunks=True)
+            state.create_dataset('dx_mat', data = [self.dx_mat],maxshape=(None,np.shape(self.dx_mat)[0],np.shape(self.dx_mat)[1]),chunks=True)
         else:
             if overwrite:
                 f = h5py.File(fname,'w')
@@ -308,6 +366,7 @@ class ez():
                 state.create_dataset('z', data = [self.z],maxshape=(None,np.shape(self.z)[0],np.shape(self.z)[1]),chunks=True)
                 state.create_dataset('e', data = [self.e],maxshape=(None,np.shape(self.e)[0],np.shape(self.e)[1]),chunks=True)
                 state.create_dataset('p', data = [self.p],maxshape=(None,np.shape(self.p)[0],np.shape(self.p)[1]),chunks=True)
+                state.create_dataset('dx_mat', data = [self.dx_mat],maxshape=(None,np.shape(self.dx_mat)[0],np.shape(self.dx_mat)[1]),chunks=True)
             else:
                 f = h5py.File(fname,'a')
                 state = f['state']
@@ -321,6 +380,8 @@ class ez():
                 state['e'][-1:] = [self.e]
                 state['p'].resize((state['p'].shape[0] + 1), axis = 0)
                 state['p'][-1:] = [self.p]
+                state['dx_mat'].resize((state['dx_mat'].shape[0] + 1), axis = 0)
+                state['dx_mat'][-1:] = [self.dx_mat]
 
         f.close()
         return
@@ -417,8 +478,8 @@ class ez():
         Plots all fields:
         """
         import matplotlib.pyplot as plt
-        out = self.get_state()[2:] #[tstep,t,z,e,p]
-        names = ['z','e','p']
+        out = self.get_state()[2:] #[tstep,t,z,e,p,dx_mat]
+        names = ['z','e','p','hop length']
         for ii,field in enumerate(out):
             im=plt.imshow(field)
             plt.title("%s" % names[ii])
@@ -542,10 +603,12 @@ class ez():
         zs = [np.mean(self.z,axis=0)]
         es = [self.e]
         qs = [self.bed_activity()]
+        ts = [self.t]
         dt = 0
         for frame in tqdm.tqdm(range(t_steps)):
             self.step(bed_feedback=bed_feedback)
-            qs.append(self.bed_activity())  
+            qs.append(self.bed_activity())
+            ts.append(self.t)  
             dt+=1 
             if dt % dt_frame ==0:
                 dt = 0
@@ -563,8 +626,8 @@ class ez():
 
         # initialize two axes objects (one in each axes)
         im_e = ax1.imshow(es[0],vmin=0,vmax=1,cmap='binary',aspect=self.Nx/(5*self.Ny))
-        im_z, = ax2.plot(zs[-1],'-k')      
-        im_q, = ax3.plot(np.zeros(len(qs)),'-k',lw=1)
+        im_z, = ax2.plot(self.x,zs[-1],'-k')      
+        im_q, = ax3.plot(ts,np.zeros(len(qs)),'-k',lw=1)
 
         # set titles and labels
         ax1.set_xticklabels([])
@@ -573,13 +636,13 @@ class ez():
         ax1.set_title("Entrainment Field")
         ax2.set_ylabel("Height (grain radii)")
         ax2.set_xlabel(r"$x$")
-        ax2.set_xlim(0,self.Nx)
-        ax2.set_ylim(0,np.max(zs[-1]))
+        ax2.set_xlim(0,1)
+        ax2.set_ylim(np.min(zs[-1]),np.max(zs[-1]))
         ax3.set_ylabel(r"Bed activity")
         ax3.set_xlabel(r"$t$")
         # ax3.axhline(y=self.q_in/self.Ny,ls='--',color='k')
-#         ax3.set_ylim(0,np.max(qs))
-        ax3.set_xlim(0,t_steps)
+        ax3.set_ylim(0,np.max(qs))
+        ax3.set_xlim(ts[0],ts[-1])
         plt.tight_layout()
 
 
@@ -636,11 +699,11 @@ class set_q(ez):
         Initialize the model
         Parameters for set_q subclass
         ----------
-        Nx: number of gridpoints in x-direction. One gridpoint represents a hop-length distance. We normalize by the total size of the domain so that dx = 1/Nx.
+        Nx: number of gridpoints in x-direction. One gridpoint represents a grain diameter. We normalize by the total size of the domain so that dx = 1/Nx.
         Ny: number of gridpoints in y-direction
-        c_0: the KE of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). This number should not be greater than 1/3 (otherwise the whole bed would be washed away). c_0 = u_p^2 skipmax/(2*g*dx), with u_p being the dimensionless grain velocity, 'skipmax' is the hop length in number of grain diameters, g is the dimensionless gravity (scales like T^-1 as dt and dx --> 0), dx and dt are the dimensionless hop length and hop duration (normalized by the domain size L and time it takes for a disturbance to move down the whole bed T, respectively).
+        c_0: the KE of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). This number should not be greater than 1/3 (otherwise the whole bed would be washed away). c_0 = u_p^2/(2*g*dx), with u_p being the dimensionless grain velocity, g is the dimensionless gravity (scales like T^-1 as dt and dx --> 0), dx and dt are the dimensionless grain diameter and hop duration (normalized by the domain size L and time it takes for a disturbance to move down the whole bed T, respectively).
         f: probability of entraining due to fluid.
-        skipmax: hop length in terms of grain radii
+        skipmax: (average) hop length in terms of grain radii. Hop lengths are binomially distributed with a mean of skipmax. (See dx_calc function)
         u_p: nondimensional velocity of grains. Sets dt: dt = dx/u_p.
         rho: sqrt((rho_s-rho_w)/rho_w) = 1.25 based on experiments. 
         initial: initial condition -- all sites are activated with a probability equal to initial
@@ -683,7 +746,7 @@ class set_q(ez):
         """
         
         ## Copies and auxiliary entrainment matrix
-        self.e = np.copy(self.ep)      
+        self.e = np.copy(self.ep)
         
         # We drop q_in number of grains (randomly) at the beginning.
         if (self.q_in <= 1)&(self.q_in>0):
@@ -705,10 +768,10 @@ class set_q(ez):
             print("ERROR: check q_in value.")
             
         if bal:        
-            ## Calculates q_out based on e[:,-skipmax:]
-            self.q_out = self.q_out_calc() 
-            self.q_tot_out += self.q_out
             temp = np.sum(self.e)+np.sum(self.z)+self.q_tot_out
+        
+        ## Recalculates dx randomly
+        self.dx_mat = self.dx_calc() 
         
         ## Calculates probabilities, given c and e
         self.p = self.p_calc()
@@ -716,6 +779,10 @@ class set_q(ez):
         ## Update new (auxiliary) entrainment matrix, given only p
         self.ep = self.e_update() 
                    
+        if bal:
+            self.q_out = self.q_out_calc() 
+            self.q_tot_out += self.q_out
+            
         ## Update height, given e and ep.
         if bed_feedback:
             self.z = self.z_update()
@@ -739,10 +806,17 @@ class set_q(ez):
         """
         # Set A (what will be the probability matrix) to zero:
         p_temp = self.f*np.ones((self.Ny,self.Nx)) # Every grid point starts with some small finite probability of being entrained by fluid
-                
-        p_temp += self.c_calc(0)*np.roll(np.roll(self.e,0,axis=0),1,axis = 1)
-        p_temp += self.c_calc(1)*np.roll(np.roll(self.e,1,axis=0),1,axis = 1)
-        p_temp += self.c_calc(-1)*np.roll(np.roll(self.e,-1,axis=0),1,axis = 1)
+        
+        # Make sure to exclude points that leave the domain
+        dxexcl = self.e*self.dx_mat+self.Xmesh
+        edom = self.e*(dxexcl < self.Nx)
+        
+        dxs = np.unique(self.dx_mat*edom)
+        for rollx in dxs[dxs>0]:
+            etemp = edom*(self.dx_mat == rollx) # Only places where self.dx_mat == rollx
+            p_temp += self.c_calc(rollx,0,periodic=False)*np.roll(np.roll(etemp,0,axis=0),rollx,axis = 1)
+            p_temp += self.c_calc(rollx,1,periodic=False)*np.roll(np.roll(etemp,1,axis=0),rollx,axis = 1)
+            p_temp += self.c_calc(rollx,-1,periodic=False)*np.roll(np.roll(etemp,-1,axis=0),rollx,axis = 1)
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
@@ -751,7 +825,6 @@ class set_q(ez):
         p_temp[:,0]=0.0
                 
         return p_temp
-
     
     ###########################
     # Calculates q_out (flux) #
@@ -760,7 +833,9 @@ class set_q(ez):
         """
         Calculates and returns q_out, the number of grains leaving the domain.
         """
-        return np.sum(self.e[:,-1])    
+        dxexcl = self.e*self.dx_mat+self.Xmesh
+        
+        return np.sum(self.e*(dxexcl >= self.Nx))   
 
     ##########
     # Extras #
@@ -820,6 +895,9 @@ class set_f(ez):
         ## Copies and auxiliary entrainment matrix
         self.e = np.copy(self.ep)    
         
+        ## Recalculates dx randomly
+        self.dx_mat = self.dx_calc() 
+        
         ## Calculates probabilities, given c and e
         self.p = self.p_calc()
 
@@ -849,17 +927,13 @@ class set_f(ez):
         # Set A (what will be the probability matrix) to zero:
         p_temp = self.f*np.ones((self.Ny,self.Nx)) # Every grid point starts with some small finite probability of being entrained by fluid
         
-        # Since we're dealing with periodic boundary conditions, we need to extend the domain using 'ghost cells'
-        z_t= self.ghost_z()[:,1:] # Take away the first ghost column, not used in this function
-        
-        # Add probabilities of entrainment based on previous e and c matrix.
-        # Periodic boundary conditions in both x and y-direction!
-        for y,x in np.argwhere(self.e):
-            p_temp[y,(x+1)%self.Nx]   += self.c_calc(z_t,y,x,0,1)
-            p_temp[(y+1)%self.Ny,(x+1)%self.Nx] += self.c_calc(z_t,y,x,1,1)
-            p_temp[(y-1)%self.Ny,(x+1)%self.Nx] += self.c_calc(z_t,y,x,-1,1)
+        for rollx in np.unique(self.dx_mat*self.e):
+            etemp = self.e*(self.dx_mat == rollx) # Only places where self.dx_mat == rollx
+            p_temp += self.c_calc(rollx,0,periodic=True)*np.roll(np.roll(etemp,0,axis=0),rollx,axis = 1)
+            p_temp += self.c_calc(rollx,1,periodic=True)*np.roll(np.roll(etemp,1,axis=0),rollx,axis = 1)
+            p_temp += self.c_calc(rollx,-1,periodic=True)*np.roll(np.roll(etemp,-1,axis=0),rollx,axis = 1)
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
-        
+                
         return p_temp
