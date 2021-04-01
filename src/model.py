@@ -58,9 +58,9 @@ class ez():
         self.x = np.linspace(0,1,self.Nx)
         self.dx = np.diff(self.x)[0] # In units of grain diameters!
         self.dt = self.skipmax*self.dx / self.u_p
-        self.g =  self.u_p**2 / (2*self.c_0*self.dx)
+        self.g =  self.u_p**2 / (2*3*self.c_0*self.dx)
         self.Q = 0.75*np.pi**(-1)*self.rho*(self.g*self.dx)**(0.5)*self.dt
-        self.scrit = -np.sqrt((1/self.c_0)**2 - 1)
+        self.scrit = -np.sqrt((1/(3*self.c_0))**2 - 1)
         self.norm = self.Ny*self.dt*(3/4.)*np.pi**(-1)*self.rho
         self.q8in = self.q_in / self.norm
         
@@ -92,6 +92,9 @@ class ez():
             # dx[:,i]=np.random.randint(1,high=self.skipmax+1,size=(self.Ny))
             dx[:,i]=np.random.binomial(n,p,size=self.Ny)
 
+        # Make the top row dx = 1, so that input flux is what we want:
+        dx[:,0] = 1
+            
         # No zero hop lengths values
         dx[dx==0]=1
                 
