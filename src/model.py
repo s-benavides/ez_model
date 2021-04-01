@@ -69,7 +69,7 @@ class ez():
         self.dx_mat = self.dx_calc()
         
         ## Output keys:
-        self.okeys = ['tstep','time','bed_activity','q_mid']
+        self.okeys = ['tstep','time','bed_activity','q_mid','e_mid','e_last']
 
     #########################################
     ####       Dynamics and Calcs      ######
@@ -295,9 +295,9 @@ class ez():
     
     def get_scalars(self):
         """
-        Get scalar outputs of model: returns [tstep, time, bed_activity, q_mid]
+        Get scalar outputs of model: returns [tstep, time, bed_activity, q_mid,e_mid,e_last]
         """
-        return [self.tstep,self.t,self.bed_activity(),self.q_profile_calc()[int(self.Nx/2)]]
+        return [self.tstep,self.t,self.bed_activity(),self.q_profile_calc()[int(self.Nx/2)],np.sum(self.e,axis=0)[int(self.Nx/2)],np.sum(self.e,axis=0)[-1]]
     
     def set_state(self,data):
         """
@@ -730,7 +730,7 @@ class set_q(ez):
         self.q_tot_out = int(0)
 
         ## Output keys:
-        self.okeys = ['tstep','time','bed_activity','q_mid','q_out']
+        self.okeys = ['tstep','time','bed_activity','q_mid','e_mid','e_last','q_out']
 
     #########################################
     ####       Dynamics and Calcs      ######
@@ -852,9 +852,9 @@ class set_q(ez):
 
     def get_scalars(self):
         """
-        Get scalar outputs of model: returns [tstep, time, bed_activity,q_mid,q_out]
+        Get scalar outputs of model: returns [tstep, time, bed_activity,q_mid,e_mid,e_last,q_out]
         """
-        return [self.tstep,self.t,self.bed_activity(),self.q_profile_calc()[int(self.Nx/2)],self.q_out_calc()]
+        return [self.tstep,self.t,self.bed_activity(),self.q_profile_calc()[int(self.Nx/2)],np.sum(self.e,axis=0)[int(self.Nx/2)],np.sum(self.e,axis=0)[-1],self.q_out_calc()]
 
 class set_f(ez):
     """
