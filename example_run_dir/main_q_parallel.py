@@ -26,11 +26,11 @@ else:
     log = open(odir+'log.txt','a')
 sys.stdout = log
 
-print(str({'Nx':Nx, 'Ny':Ny, 'c_0':c_0, 'f':f, 'skipmax':skipmax, 'q_in':q_in,'slope':slope,'H':H,'NS':NS,'NSc':NSc,'overwrite':overwrite,'idir':idir,'odir':odir,'rank':rank}),flush=True)
+print(str({'Nx':Nx, 'Ny':Ny, 'c_0':c_0, 'f':f,'u_p':u_p, 'skipmax':skipmax, 'q_in':q_in,'slope':slope,'H':H,'NS':NS,'NSc':NSc,'overwrite':overwrite,'idir':idir,'odir':odir,'rank':rank}),flush=True)
 
 # Initialize
 print('Initializing... Mode: set_q (flume-like setup)',flush=True)
-set_q = ez.set_q(Nx,Ny,c_0,f,skipmax,q_in)
+set_q = ez.set_q(Nx,Ny,c_0,f,skipmax,u_p,q_in)
 
 if not overwrite:
     # Load data:
@@ -96,12 +96,16 @@ try:
             t = np.array(odata)[:,1]
             q = np.array(odata)[:,2]
             qmid = np.array(odata)[:,3]
-            qout = np.array(odata)[:,4]
+            emid = np.array(odata)[:,4]
+            elast = np.array(odata)[:,5]
+            qout = np.array(odata)[:,6]
     
             # Bin and average the data
             tb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], t[tstep>tstep_bin], bins=NSc)
             qb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], q[tstep>tstep_bin], bins=NSc)
             qmidb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], qmid[tstep>tstep_bin], bins=NSc)
+            emidb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], emid[tstep>tstep_bin], bins=NSc)
+            elastb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], elast[tstep>tstep_bin], bins=NSc)
             qoutb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], qout[tstep>tstep_bin], bins=NSc)
             tstepb = tstepb[:-1] + np.diff(tstepb)/2
 
@@ -109,11 +113,13 @@ try:
             t = np.concatenate((t[tstep<tstep_bin],tb))
             q = np.concatenate((q[tstep<tstep_bin],qb))
             qmid = np.concatenate((qmid[tstep<tstep_bin],qmidb))
+            emid = np.concatenate((emid[tstep<tstep_bin],emidb))
+            elast = np.concatenate((elast[tstep<tstep_bin],elastb))
             qout = np.concatenate((qout[tstep<tstep_bin],qoutb))
             tstep = np.concatenate((tstep[tstep<tstep_bin],tstepb))
 
             # Put it back into odata shape
-            odata = list(np.array([tstep,t,q,qmid,qout]).T)
+            odata = list(np.array([tstep,t,q,qmid,emid,elast,qout]).T)
             
             time.sleep(1) # Avoids saving multiple times.
 
@@ -149,12 +155,16 @@ finally:
         t = np.array(odata)[:,1]
         q = np.array(odata)[:,2]
         qmid = np.array(odata)[:,3]
-        qout = np.array(odata)[:,4]
+        emid = np.array(odata)[:,4]
+        elast = np.array(odata)[:,5]
+        qout = np.array(odata)[:,6]
 
         # Bin and average the data
         tb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], t[tstep>tstep_bin], bins=NSc)
         qb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], q[tstep>tstep_bin], bins=NSc)
         qmidb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], qmid[tstep>tstep_bin], bins=NSc)
+        emidb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], emid[tstep>tstep_bin], bins=NSc)
+        elastb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], elast[tstep>tstep_bin], bins=NSc)
         qoutb, tstepb, binnum = binned_statistic(tstep[tstep>tstep_bin], qout[tstep>tstep_bin], bins=NSc)
         tstepb = tstepb[:-1] + np.diff(tstepb)/2
 
@@ -162,10 +172,13 @@ finally:
         t = np.concatenate((t[tstep<tstep_bin],tb))
         q = np.concatenate((q[tstep<tstep_bin],qb))
         qmid = np.concatenate((qmid[tstep<tstep_bin],qmidb))
+        emid = np.concatenate((emid[tstep<tstep_bin],emidb))
+        elast = np.concatenate((elast[tstep<tstep_bin],elastb))
         qout = np.concatenate((qout[tstep<tstep_bin],qoutb))
         tstep = np.concatenate((tstep[tstep<tstep_bin],tstepb))
 
         # Put it back into odata shape
-        odata = list(np.array([tstep,t,q,qmid,qout]).T)
+        odata = list(np.array([tstep,t,q,qmid,emid,elast,qout]).T)
+
     set_q.export_scalars(odir,odata,overwrite=overwrite) #If loading from previous run, make sure 'overwrite' is 0 (false), so it updates the same file.
     print('Finished saving. Exiting... \n \n',flush=True)
