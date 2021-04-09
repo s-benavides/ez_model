@@ -8,7 +8,7 @@ from os import path
 
 class ez():
     
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0, fb = 0.3):
         """
         Initialize the model
         Parameters for ez superclass
@@ -21,6 +21,7 @@ class ez():
         u_p: nondimensional velocity of grains. Sets dt: dt = dx/u_p.
         rho: sqrt((rho_s-rho_w)/rho_w) = 1.25 based on experiments. 
         initial: initial condition -- all sites are activated with a probability equal to initial
+        fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
         """
         ## Input parameters to be communicated to other functions:        
         self.Nx = int(Nx)
@@ -35,6 +36,7 @@ class ez():
         self.f = f
         self.rho = rho
         self.q_in=0.0 
+        self.fb = fb
        
         ####################
         ## INITIAL fields ##
@@ -697,7 +699,7 @@ class set_q(ez):
 
     (see __init__ help for more info on parameters.)
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,q_in,rho = 1.25,initial=0.0):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,q_in,rho = 1.25,initial=0.0,fb = 0.3):
         """
         Initialize the model
         Parameters for set_q subclass
@@ -712,7 +714,7 @@ class set_q(ez):
         initial: initial condition -- all sites are activated with a probability equal to initial
         q_in: number of entrained particles at top of the bed (flux in). Can be less than one but must be rational! q_in <= Ny!
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial)
+        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb = fb)
         ## Input parameters to be communicated to other functions:        
         if q_in>Ny:
             print("q_in > Ny ! Setting q_in = Ny.")
@@ -721,6 +723,8 @@ class set_q(ez):
             self.q_in = q_in
 
         self.q8in = self.q_in / self.norm
+        
+        self.scrit = -np.sqrt((1/(3*self.c_0*(1-self.fb*(self.q_in/self.Ny))))**2 - 1)
         
         ####################
         ## INITIAL fields ##
@@ -821,6 +825,9 @@ class set_q(ez):
             p_temp += self.c_calc(rollx,1,periodic=False)*np.roll(np.roll(etemp,1,axis=0),rollx,axis = 1)
             p_temp += self.c_calc(rollx,-1,periodic=False)*np.roll(np.roll(etemp,-1,axis=0),rollx,axis = 1)
         
+        # Include fluid feedback:
+        p_temp = p_temp*(1-self.fb*self.e)
+        
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
         
@@ -862,7 +869,7 @@ class set_f(ez):
     In this model, the main input parameter is f, which is the probability that extreme events in fluid stresses entrain a grain and move it downstream.
     The entrained grains flow out of one end and, importantly, come back into the other end: this mode has periodic boundary conditions in all directions.
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.01):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.01,fb=0.3):
         """
         Initialize the model
         Parameters for set_f subclass
@@ -876,7 +883,7 @@ class set_f(ez):
         rho: sqrt((rho_s-rho_w)/rho_w) = 1.25 based on experiments. 
         initial: initial condition -- all sites are activated with a probability equal to initial
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial)
+        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb=fb)
         print("WARNING: this model needs to be updated!! Namely: c_calc has changed, so ghost_z and p_calc need to be changed!!")
         
     #########################################
@@ -935,6 +942,9 @@ class set_f(ez):
             p_temp += self.c_calc(rollx,0,periodic=True)*np.roll(np.roll(etemp,0,axis=0),rollx,axis = 1)
             p_temp += self.c_calc(rollx,1,periodic=True)*np.roll(np.roll(etemp,1,axis=0),rollx,axis = 1)
             p_temp += self.c_calc(rollx,-1,periodic=True)*np.roll(np.roll(etemp,-1,axis=0),rollx,axis = 1)
+        
+        # Include fluid feedback:
+        p_temp = p_temp*(1-self.fb*self.e)
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
