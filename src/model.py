@@ -5,6 +5,7 @@ import numpy as np
 import tqdm
 import h5py
 from os import path
+import random
 
 class ez():
     
@@ -207,17 +208,20 @@ class ez():
           
         for x in np.argwhere(z_temp_s>0):
             indlist = np.where(self.e[:,x])[0] # will deposit in e locations
-            indn = np.random.choice(len(indlist),z_temp_s[x],replace=False) # randomly pick these locations
-            ind = indlist[indn]
+            ind = random.sample(indlist.tolist(),k=z_temp_s[x][0])
+#             indn = np.random.choice(len(indlist),z_temp_s[x],replace=False) # randomly pick these locations
+#             ind = indlist[indn]
             z_temp[ind,x] += 1  # deposit
             
         for x in np.argwhere(z_temp_s<0):
             indlist = np.where(self.ep[:,x[0]:x[0]+np.max(self.dx_mat)+1])[0] # will deposit in locations one downstream of ep
             indlist = np.unique(indlist)
             if len(indlist)<abs(z_temp_s[x][0]):
-                indlist= np.concatenate((indlist,np.random.choice(np.setdiff1d(np.arange(self.Ny),indlist),abs(z_temp_s[x][0])-len(indlist),replace=False)))
-            indn = np.random.choice(len(indlist),abs(z_temp_s[x][0]),replace=False)
-            ind = indlist[indn]
+#                 indlist= np.concatenate((indlist,np.random.choice(np.setdiff1d(np.arange(self.Ny),indlist),abs(z_temp_s[x][0])-len(indlist),replace=False)))
+                indlist= np.concatenate((indlist,random.sample(np.setdiff1d(np.arange(self.Ny),indlist).tolist(),k=abs(z_temp_s[x][0])-len(indlist))))
+            ind = random.sample(indlist.tolist(),k=abs(z_temp_s[x][0]))
+#             indn = np.random.choice(len(indlist),abs(z_temp_s[x][0]),replace=False)
+#             ind = indlist[indn]
             z_temp[ind,x] -= 1 # entrain
         
         # Sets any negative z to zero (although this should not happen...)
@@ -778,8 +782,9 @@ class set_q(ez):
             temp = np.sum(self.e)+np.sum(self.z)+self.q_tot_out
         
         ## Recalculates dx randomly
-        self.dx_mat = self.dx_calc() 
-        
+        self.dx_mat = self.dx_calc()
+#         self.dx_mat = np.ones(self.e.shape,dtype=np.int)
+    
         ## Calculates probabilities, given c and e
         self.p = self.p_calc()
         
