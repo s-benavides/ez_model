@@ -288,8 +288,11 @@ class ez():
         c0str = str(self.c_0).replace(".", "d")
         fstr = str(self.f).replace(".", "d")
         upstr = str(self.u_p).replace(".", "d")
-        sigma_c_str = str(self.sigma_c).replace(".", "d")
-        return 'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+str(self.q_in).replace(".","d")+'_c0_'+c0str+'_f_'+fstr+'_skip_'+str(self.skipmax)+'_u_p_'+upstr'_sigma_c_'+sigma_c_str
+        if np.isnan(self.sigma_c):
+            return 'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+str(self.q_in).replace(".","d")+'_c0_'+c0str+'_f_'+fstr+'_skip_'+str(self.skipmax)+'_u_p_'+upstr
+        else:
+            sigma_c_str = str(self.sigma_c).replace(".", "d")
+            return 'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+str(self.q_in).replace(".","d")+'_c0_'+c0str+'_f_'+fstr+'_skip_'+str(self.skipmax)+'_u_p_'+upstr+'_sigma_c_'+sigma_c_str
  
     def get_state(self):
         """
@@ -301,7 +304,10 @@ class ez():
         """
         Get parameters of model: returns [Nx,Ny,c_0,f,skipmax,u_p,rho]
         """
-        return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'u_p':self.u_p,'rho':self.rho,'sigma_c':self.sigma_c}
+        if np.isnan(self.sigma_c):
+            return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'u_p':self.u_p,'rho':self.rho,'sigma_c':self.sigma_c}
+        else:
+            return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'u_p':self.u_p,'rho':self.rho}
     
     def get_scalars(self):
         """
@@ -875,7 +881,10 @@ class set_q(ez):
         """
         Get parameters of model: returns [Nx,Ny,c_0,f,skipmax,u_p,rho,q_in]
         """
-        return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'u_p':self.u_p,'rho':self.rho, 'sigma_c': self.sigma_c, 'q_in':self.q_in}
+        if np.isnan(self.sigma_c):
+            return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'u_p':self.u_p,'rho':self.rho, 'q_in':self.q_in}
+        else:
+            return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'u_p':self.u_p,'rho':self.rho, 'sigma_c': self.sigma_c, 'q_in':self.q_in}
 
     def get_scalars(self):
         """
