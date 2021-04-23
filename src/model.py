@@ -9,7 +9,7 @@ import random
 
 class ez():
     
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0, fb = 0.3):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0, fb = 0.3,sigma_c = np.nan):
         """
         Initialize the model
         Parameters for ez superclass
@@ -23,6 +23,7 @@ class ez():
         rho: sqrt((rho_s-rho_w)/rho_w) = 1.25 based on experiments. 
         initial: initial condition -- all sites are activated with a probability equal to initial
         fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
+        sigma_c (default = NaN) : if sigma_c is not nan, then c_0 will be taken from a normal distribution with mean c_0 and variance sigma_c * q_in (so that, based on the central limit theorem, the variance of the y-averaged c_0 is sigma_c).
         """
         ## Input parameters to be communicated to other functions:        
         self.Nx = int(Nx)
@@ -38,6 +39,7 @@ class ez():
         self.rho = rho
         self.q_in=0.0 
         self.fb = fb
+        self.sigma_c = sigma_c
        
         ####################
         ## INITIAL fields ##
@@ -117,8 +119,9 @@ class ez():
             z_temp = np.copy(self.z)
         
         s=(z_temp-np.roll(np.roll(z_temp,rolly,axis=0),rollx,axis = 1))/rollx
-            
-        c_temp = self.c_0*np.sqrt(s**2+1)
+        
+        c_temp = np.sqrt(s**2+1)
+        
         # Setting c = 0 for any slope that is positive
         c_temp[s>0] = 0.0
         
@@ -703,7 +706,7 @@ class set_q(ez):
 
     (see __init__ help for more info on parameters.)
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,q_in,rho = 1.25,initial=0.0,fb = 0.3):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,q_in,rho = 1.25,initial=0.0,fb = 0.3,sigma_c = np.nan):
         """
         Initialize the model
         Parameters for set_q subclass
@@ -716,9 +719,11 @@ class set_q(ez):
         u_p: nondimensional velocity of grains. Sets dt: dt = dx/u_p.
         rho: sqrt((rho_s-rho_w)/rho_w) = 1.25 based on experiments. 
         initial: initial condition -- all sites are activated with a probability equal to initial
+        fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
+        sigma_c (default = NaN) : if sigma_c is not nan, then c_0 will be taken from a normal distribution with mean c_0 and variance sigma_c * q_in (so that, based on the central limit theorem, the variance of the y-averaged c_0 is sigma_c).
         q_in: number of entrained particles at top of the bed (flux in). Can be less than one but must be rational! q_in <= Ny!
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb = fb)
+        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb = fb,sigma_c= sigma_c)
         ## Input parameters to be communicated to other functions:        
         if q_in>Ny:
             print("q_in > Ny ! Setting q_in = Ny.")
@@ -729,6 +734,9 @@ class set_q(ez):
         self.q8in = self.q_in / self.norm
         
         self.scrit = -np.sqrt((1/(3*self.c_0*(1-self.fb*(self.q_in/self.Ny))))**2 - 1)
+        
+        # So that the y-averaged c_0 has a variance equal to sigma_c !
+        self.sigma_c = sigma_c*self.q_in
         
         ####################
         ## INITIAL fields ##
@@ -830,8 +838,14 @@ class set_q(ez):
             p_temp += self.c_calc(rollx,1,periodic=False)*np.roll(np.roll(etemp,1,axis=0),rollx,axis = 1)
             p_temp += self.c_calc(rollx,-1,periodic=False)*np.roll(np.roll(etemp,-1,axis=0),rollx,axis = 1)
         
+                    
+        if np.isnan(self.sigma_c): # In case we want no noise
+            cdist = self.c_0
+        else:
+            cdist = np.random.normal(size=(self.Ny,self.Nx))*self.sigma_c + self.c_0 
+        
         # Include fluid feedback:
-        p_temp = p_temp*(1-self.fb*self.e)
+        p_temp = p_temp*(1-self.fb*self.e)*cdist
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
@@ -948,8 +962,13 @@ class set_f(ez):
             p_temp += self.c_calc(rollx,1,periodic=True)*np.roll(np.roll(etemp,1,axis=0),rollx,axis = 1)
             p_temp += self.c_calc(rollx,-1,periodic=True)*np.roll(np.roll(etemp,-1,axis=0),rollx,axis = 1)
         
+        if np.isnan(self.sigma_c): # In case we want no noise
+            cdist = self.c_0
+        else:
+            cdist = np.random.normal(size=(self.Ny,self.Nx))*self.sigma_c + self.c_0 
+        
         # Include fluid feedback:
-        p_temp = p_temp*(1-self.fb*self.e)
+        p_temp = p_temp*(1-self.fb*self.e)*cdist
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
