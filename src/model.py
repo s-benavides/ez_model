@@ -850,8 +850,7 @@ class set_q(ez):
             cdist = self.c_0
         else:
             cdist = np.random.normal(size=(self.Ny,self.Nx))*self.sigma_c + self.c_0 
-        
-        cdist[cdist<0] = 0.0
+            cdist[cdist<0] = 0.0
         
         # Include fluid feedback:
         p_temp = p_temp*(1-self.fb*self.e)*cdist
