@@ -23,7 +23,7 @@ class ez():
         rho: sqrt((rho_s-rho_w)/rho_w) = 1.25 based on experiments. 
         initial: initial condition -- all sites are activated with a probability equal to initial
         fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
-        sigma_c (default = NaN) : if sigma_c is not nan, then c_0 will be taken from a normal distribution with mean c_0 and variance sigma_c * q_in (so that, based on the central limit theorem, the variance of the y-averaged c_0 is sigma_c).
+        sigma_c (default = NaN) : if sigma_c is not nan, then c_0 will be taken from a normal distribution with mean c_0 and standard deviation sigma_c * sqrt(q_in) (so that, based on the central limit theorem, the standard deviation of the y-averaged c_0 is sigma_c). If using set_f mode, it will do sigma_c * f / Nx.
         """
         ## Input parameters to be communicated to other functions:        
         self.Nx = int(Nx)
@@ -288,7 +288,8 @@ class ez():
         c0str = str(self.c_0).replace(".", "d")
         fstr = str(self.f).replace(".", "d")
         upstr = str(self.u_p).replace(".", "d")
-        return 'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+str(self.q_in).replace(".","d")+'_c0_'+c0str+'_f_'+fstr+'_skip_'+str(self.skipmax)+'_u_p_'+upstr
+        sigma_c_str = str(self.sigma_c).replace(".", "d")
+        return 'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+str(self.q_in).replace(".","d")+'_c0_'+c0str+'_f_'+fstr+'_skip_'+str(self.skipmax)+'_u_p_'+upstr'_sigma_c_'+sigma_c_str
  
     def get_state(self):
         """
@@ -300,7 +301,7 @@ class ez():
         """
         Get parameters of model: returns [Nx,Ny,c_0,f,skipmax,u_p,rho]
         """
-        return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'u_p':self.u_p,'rho':self.rho}
+        return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'u_p':self.u_p,'rho':self.rho,'sigma_c':self.sigma_c}
     
     def get_scalars(self):
         """
@@ -720,7 +721,7 @@ class set_q(ez):
         rho: sqrt((rho_s-rho_w)/rho_w) = 1.25 based on experiments. 
         initial: initial condition -- all sites are activated with a probability equal to initial
         fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
-        sigma_c (default = NaN) : if sigma_c is not nan, then c_0 will be taken from a normal distribution with mean c_0 and variance sigma_c * q_in (so that, based on the central limit theorem, the variance of the y-averaged c_0 is sigma_c).
+        sigma_c (default = NaN) : if sigma_c is not nan, then c_0 will be taken from a normal distribution with mean c_0 and standard deviation sigma_c * sqrt(q_in) (so that, based on the central limit theorem, the standard deviation of the y-averaged c_0 is sigma_c). If using set_f mode, it will do sigma_c * f / Nx.
         q_in: number of entrained particles at top of the bed (flux in). Can be less than one but must be rational! q_in <= Ny!
         """
         super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb = fb,sigma_c= sigma_c)
@@ -736,7 +737,7 @@ class set_q(ez):
         self.scrit = -np.sqrt((1/(3*self.c_0*(1-self.fb*(self.q_in/self.Ny))))**2 - 1)
         
         # So that the y-averaged c_0 has a variance equal to sigma_c !
-        self.sigma_c = sigma_c*self.q_in
+        self.sigma_c = sigma_c*np.sqrt(self.q_in)
         
         ####################
         ## INITIAL fields ##
@@ -874,7 +875,7 @@ class set_q(ez):
         """
         Get parameters of model: returns [Nx,Ny,c_0,f,skipmax,u_p,rho,q_in]
         """
-        return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'u_p':self.u_p,'rho':self.rho,'q_in':self.q_in}
+        return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'u_p':self.u_p,'rho':self.rho, 'sigma_c': self.sigma_c, 'q_in':self.q_in}
 
     def get_scalars(self):
         """
@@ -888,7 +889,7 @@ class set_f(ez):
     In this model, the main input parameter is f, which is the probability that extreme events in fluid stresses entrain a grain and move it downstream.
     The entrained grains flow out of one end and, importantly, come back into the other end: this mode has periodic boundary conditions in all directions.
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.01,fb=0.3):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.01,fb=0.3,sigma_c = np.nan):
         """
         Initialize the model
         Parameters for set_f subclass
@@ -901,9 +902,13 @@ class set_f(ez):
         u_p: nondimensional velocity of grains. Sets dt: dt = dx/u_p.
         rho: sqrt((rho_s-rho_w)/rho_w) = 1.25 based on experiments. 
         initial: initial condition -- all sites are activated with a probability equal to initial
+        fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
+        sigma_c (default = NaN) : if sigma_c is not nan, then c_0 will be taken from a normal distribution with mean c_0 and standard deviation sigma_c * sqrt(q_in) (so that, based on the central limit theorem, the standard deviation of the y-averaged c_0 is sigma_c). If using set_f mode, it will do sigma_c * f / Nx.
         """
         super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb=fb)
         print("WARNING: this model needs to be updated!! Namely: c_calc has changed, so ghost_z and p_calc need to be changed!!")
+        
+        self.sigma_c = sigma_c * np.sqrt(self.f / self.Nx)
         
     #########################################
     ####       Dynamics and Calcs      ######
