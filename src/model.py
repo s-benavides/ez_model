@@ -9,7 +9,7 @@ import random
 
 class ez():
     
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0, fb = 0.3,sigma_c = np.nan):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0, fb = 0.3,sigma_c = 0.0):
         """
         Initialize the model
         Parameters for ez superclass
@@ -23,7 +23,7 @@ class ez():
         rho: sqrt((rho_s-rho_w)/rho_w) = 1.25 based on experiments. 
         initial: initial condition -- all sites are activated with a probability equal to initial
         fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
-        sigma_c (default = NaN) : if sigma_c is not nan, then c_0 will be taken from a normal distribution with mean c_0 and standard deviation sigma_c * sqrt(q_in) (so that, based on the central limit theorem, the standard deviation of the y-averaged c_0 is sigma_c). If using set_f mode, it will do sigma_c * f / Nx.
+        sigma_c (default = 0.0) : if sigma_c is not 0.0, then c_0 will be taken from a normal distribution with mean c_0 and standard deviation sigma_c * sqrt(q_in) (so that, based on the central limit theorem, the standard deviation of the y-averaged c_0 is sigma_c). If using set_f mode, it will do sigma_c * f / Nx.
         """
         ## Input parameters to be communicated to other functions:        
         self.Nx = int(Nx)
@@ -288,7 +288,7 @@ class ez():
         c0str = str(self.c_0).replace(".", "d")
         fstr = str(self.f).replace(".", "d")
         upstr = str(self.u_p).replace(".", "d")
-        if np.isnan(self.sigma_c):
+        if self.sigma_c==0.0:
             return 'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+str(self.q_in).replace(".","d")+'_c0_'+c0str+'_f_'+fstr+'_skip_'+str(self.skipmax)+'_u_p_'+upstr
         else:
             sigma_c_str = str(self.sigma_c).replace(".", "d")
@@ -304,7 +304,7 @@ class ez():
         """
         Get parameters of model: returns [Nx,Ny,c_0,f,skipmax,u_p,rho]
         """
-        if np.isnan(self.sigma_c):
+        if self.sigma_c==0.0:
             return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'u_p':self.u_p,'rho':self.rho,'sigma_c':self.sigma_c}
         else:
             return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'u_p':self.u_p,'rho':self.rho}
@@ -713,7 +713,7 @@ class set_q(ez):
 
     (see __init__ help for more info on parameters.)
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,q_in,rho = 1.25,initial=0.0,fb = 0.3,sigma_c = np.nan):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,q_in,rho = 1.25,initial=0.0,fb = 0.3,sigma_c = 0.0):
         """
         Initialize the model
         Parameters for set_q subclass
@@ -727,7 +727,7 @@ class set_q(ez):
         rho: sqrt((rho_s-rho_w)/rho_w) = 1.25 based on experiments. 
         initial: initial condition -- all sites are activated with a probability equal to initial
         fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
-        sigma_c (default = NaN) : if sigma_c is not nan, then c_0 will be taken from a normal distribution with mean c_0 and standard deviation sigma_c * sqrt(q_in) (so that, based on the central limit theorem, the standard deviation of the y-averaged c_0 is sigma_c). If using set_f mode, it will do sigma_c * f / Nx.
+        sigma_c (default = 0.0) : if sigma_c is not 0.0, then c_0 will be taken from a normal distribution with mean c_0 and standard deviation sigma_c * sqrt(q_in) (so that, based on the central limit theorem, the standard deviation of the y-averaged c_0 is sigma_c). If using set_f mode, it will do sigma_c * f / Nx.
         q_in: number of entrained particles at top of the bed (flux in). Can be less than one but must be rational! q_in <= Ny!
         """
         super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb = fb,sigma_c= sigma_c)
@@ -846,7 +846,7 @@ class set_q(ez):
             p_temp += self.c_calc(rollx,-1,periodic=False)*np.roll(np.roll(etemp,-1,axis=0),rollx,axis = 1)
         
                     
-        if np.isnan(self.sigma_c): # In case we want no noise
+        if self.sigma_c==0.0: # In case we want no noise
             cdist = self.c_0
         else:
             cdist = np.random.normal(size=(self.Ny,self.Nx))*self.sigma_c + self.c_0 
@@ -881,7 +881,7 @@ class set_q(ez):
         """
         Get parameters of model: returns [Nx,Ny,c_0,f,skipmax,u_p,rho,q_in]
         """
-        if np.isnan(self.sigma_c):
+        if self.sigma_c==0.0:
             return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'u_p':self.u_p,'rho':self.rho, 'q_in':self.q_in}
         else:
             return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'u_p':self.u_p,'rho':self.rho, 'sigma_c': self.sigma_c, 'q_in':self.q_in}
@@ -898,7 +898,7 @@ class set_f(ez):
     In this model, the main input parameter is f, which is the probability that extreme events in fluid stresses entrain a grain and move it downstream.
     The entrained grains flow out of one end and, importantly, come back into the other end: this mode has periodic boundary conditions in all directions.
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.01,fb=0.3,sigma_c = np.nan):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.01,fb=0.3,sigma_c = 0.0):
         """
         Initialize the model
         Parameters for set_f subclass
@@ -912,7 +912,7 @@ class set_f(ez):
         rho: sqrt((rho_s-rho_w)/rho_w) = 1.25 based on experiments. 
         initial: initial condition -- all sites are activated with a probability equal to initial
         fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
-        sigma_c (default = NaN) : if sigma_c is not nan, then c_0 will be taken from a normal distribution with mean c_0 and standard deviation sigma_c * sqrt(q_in) (so that, based on the central limit theorem, the standard deviation of the y-averaged c_0 is sigma_c). If using set_f mode, it will do sigma_c * f / Nx.
+        sigma_c (default = 0.0) : if sigma_c is not 0.0, then c_0 will be taken from a normal distribution with mean c_0 and standard deviation sigma_c * sqrt(q_in) (so that, based on the central limit theorem, the standard deviation of the y-averaged c_0 is sigma_c). If using set_f mode, it will do sigma_c * f / Nx.
         """
         super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb=fb)
         print("WARNING: this model needs to be updated!! Namely: c_calc has changed, so ghost_z and p_calc need to be changed!!")
@@ -976,7 +976,7 @@ class set_f(ez):
             p_temp += self.c_calc(rollx,1,periodic=True)*np.roll(np.roll(etemp,1,axis=0),rollx,axis = 1)
             p_temp += self.c_calc(rollx,-1,periodic=True)*np.roll(np.roll(etemp,-1,axis=0),rollx,axis = 1)
         
-        if np.isnan(self.sigma_c): # In case we want no noise
+        if self.sigma_c==0.0: # In case we want no noise
             cdist = self.c_0
         else:
             cdist = np.random.normal(size=(self.Ny,self.Nx))*self.sigma_c + self.c_0 
