@@ -32,9 +32,6 @@ class ez():
         self.u_p = u_p
         self.skipmax = skipmax
         self.c_0 = c_0
-        if c_0>(1/3.):
-            print("WARNING: c_0 cannot be greater than 1/3. Setting c_0 = 1/3.")
-            self.c_0 = 1/3.
         self.f = f
         self.rho = rho
         self.q_in=0.0 
@@ -50,9 +47,9 @@ class ez():
         self.z = self.bed_h*np.ones((Ny,Nx),dtype=int) # Units of grain radii
         # Start with random number entrained
         A = np.random.rand(self.Ny,self.Nx)
-        self.e = A<initial
+        self.ep = A<initial
         # The auxiliary e:
-        self.ep = np.zeros((Ny,Nx),dtype=bool)
+        self.e = self.ep.copy()
         ## Probabilities
         self.p = np.zeros((Ny,Nx))
         ## Time:
@@ -65,7 +62,6 @@ class ez():
         self.dt = self.skipmax*self.dx / self.u_p
         self.g =  self.u_p**2 / (2*3*self.c_0*self.dx)
         self.Q = 0.75*np.pi**(-1)*self.rho*(self.g*self.dx)**(0.5)*self.dt
-        self.scrit = -np.sqrt((1/(3*self.c_0))**2 - 1)
         self.norm = self.Ny*self.dt*(3/4.)*np.pi**(-1)*self.rho
         self.q8in = self.q_in / self.norm
         
@@ -83,7 +79,7 @@ class ez():
     #####################
     # Calculation of dx #
     #####################
-    def dx_calc(self):
+    def dx_calc(self,periodic=False):
         """
         Calculates dx from binomial distribution with mean skipmax and variance skipmax/2. Returns dx.
         """            
@@ -97,8 +93,9 @@ class ez():
             # dx[:,i]=np.random.randint(1,high=self.skipmax+1,size=(self.Ny))
             dx[:,i]=np.random.binomial(n,p,size=self.Ny)
 
-        # Make the top row dx = 1, so that input flux is what we want:
-        dx[:,0] = 1
+        if not periodic:
+            # Make the top row dx = 1, so that input flux is what we want:
+            dx[:,0] = 1
             
         # No zero hop lengths values
         dx[dx==0]=1
@@ -109,15 +106,12 @@ class ez():
     # Calculating collision likelyhood based on z.#
     ###############################################
     # c_0     = collision coefficient at zero slope.
-    def c_calc(self,rollx,rolly,periodic=False):
+    def c_calc(self,rollx,rolly):
         """
         Calculates and returns c, given slope with neighbors and c_0.
         """    
-        if periodic:
-            z_temp = self.ghost_z()
-        else:
-            z_temp = np.copy(self.z)
-        
+        z_temp = np.copy(self.z)
+            
         s=(z_temp-np.roll(np.roll(z_temp,rolly,axis=0),rollx,axis = 1))/rollx
         
         c_temp = np.sqrt(s**2+1)
@@ -125,12 +119,39 @@ class ez():
         # Setting c = 0 for any slope that is positive
         c_temp[s>0] = 0.0
         
-        if periodic:
-            return c_temp[:,1:self.Nx+1]
-        else:
-            return c_temp
+        return c_temp
 
 
+    ###############################
+    # Random entrainment by fluid #
+    ###############################
+    def f_entrain(self):
+        """
+        Entrains sites randomly due to fluid perturbation. Input: f, output: self.ep, self.z.
+        """
+        
+        # Set A (what will be the probability matrix) to zero:
+        p_temp = self.f*np.ones((self.Ny,self.Nx))
+                
+        # Copy of arrays of interest
+        ep_temp = np.copy(self.ep)
+        z_temp = np.copy(self.z)
+                
+        #Generate random numbers between zero and one for the whole domain
+        rndc = np.random.uniform(0.0, 1.0,size=(self.Ny,self.Nx))
+        
+        # In places where p > rndc, entrainments happen.
+        ep_temp[rndc<=p_temp] = True
+
+        # Subtract from places upstream of where we found them entrained.
+        ys,xs = np.where(ep_temp ^ self.ep)
+#         dxs = self.dx_mat[ys,xs] 
+        dxs = self.skipmax # Advecting with mean flow just to avoid overlaps
+        xs = (xs-dxs)%self.Nx
+        z_temp[ys,xs] -=  1
+        
+        return ep_temp,z_temp
+        
     ##################################
     # Calculates bed activity (flux) #
     ##################################
@@ -164,7 +185,7 @@ class ez():
         rndc = np.random.uniform(0.0, 1.0,size=(self.Ny,self.Nx))
         
         # In places where p > rndc, entrainments happen.
-        A[rndc<self.p] = True
+        A[rndc<=self.p] = True
         
         return A
 
@@ -466,7 +487,8 @@ class ez():
         ax1.tick_params(axis='both',bottom=False,left=False)
         ax1.set_title("Entrainment Field")
         #
-        im = ax2.imshow(self.z,vmin=0,vmax=np.max(self.z),cmap=cm.Greens,aspect=self.Nx/(5*self.Ny))
+        im = ax2.imshow(self.z,vmin=np.min(self.z),vmax=np.max(self.z),
+                        cmap=cm.Greens,aspect=self.Nx/(5*self.Ny))
         ax2.set_title("Height Field")
         fig.colorbar(im,ax=ax2,orientation='horizontal')
         ax2.set_xticklabels([])
@@ -745,6 +767,10 @@ class set_q(ez):
         # So that the y-averaged c_0 has a variance equal to sigma_c !
         self.sigma_c = sigma_c*np.sqrt(self.q_in)
         
+        if self.c_0>(1/3.):
+            print("WARNING: c_0 cannot be greater than 1/3. Otherwise a flat slope will transport. Setting c_0 = 1/3.")
+            self.c_0 = 1/3.
+        
         ####################
         ## INITIAL fields ##
         ####################
@@ -813,7 +839,11 @@ class set_q(ez):
         ## Update height, given e and ep.
         if bed_feedback:
             self.z = self.z_update()
-              
+        
+        if self.f>0:
+            ## Random entrainment by fluid:
+            self.ep,self.z = self.f_entrain()
+        
         ## Add to time:
         self.tstep += 1
         self.t     += self.dt
@@ -832,7 +862,7 @@ class set_q(ez):
         Calculates and returns probability matrix, given c and e.
         """
         # Set A (what will be the probability matrix) to zero:
-        p_temp = self.f*np.ones((self.Ny,self.Nx)) # Every grid point starts with some small finite probability of being entrained by fluid
+        p_temp = np.zeros((self.Ny,self.Nx))
         
         # Make sure to exclude points that leave the domain
         dxexcl = self.e*self.dx_mat+self.Xmesh
@@ -841,9 +871,9 @@ class set_q(ez):
         dxs = np.unique(self.dx_mat*edom)
         for rollx in dxs[dxs>0]:
             etemp = edom*(self.dx_mat == rollx) # Only places where self.dx_mat == rollx
-            p_temp += self.c_calc(rollx,0,periodic=False)*np.roll(np.roll(etemp,0,axis=0),rollx,axis = 1)
-            p_temp += self.c_calc(rollx,1,periodic=False)*np.roll(np.roll(etemp,1,axis=0),rollx,axis = 1)
-            p_temp += self.c_calc(rollx,-1,periodic=False)*np.roll(np.roll(etemp,-1,axis=0),rollx,axis = 1)
+            p_temp += self.c_calc(rollx,0)*np.roll(np.roll(etemp,0,axis=0),rollx,axis = 1)
+            p_temp += self.c_calc(rollx,1)*np.roll(np.roll(etemp,1,axis=0),rollx,axis = 1)
+            p_temp += self.c_calc(rollx,-1)*np.roll(np.roll(etemp,-1,axis=0),rollx,axis = 1)
         
                     
         if self.sigma_c==0.0: # In case we want no noise
@@ -854,6 +884,9 @@ class set_q(ez):
         
         # Include fluid feedback:
         p_temp = p_temp*(1-self.fb*self.e)*cdist
+        
+#         # Every grid point has some small finite probability of being entrained by fluid
+#         p_temp += self.f 
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
@@ -915,10 +948,15 @@ class set_f(ez):
         fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
         sigma_c (default = 0.0) : if sigma_c is not 0.0, then c_0 will be taken from a normal distribution with mean c_0 and standard deviation sigma_c * sqrt(q_in) (so that, based on the central limit theorem, the standard deviation of the y-averaged c_0 is sigma_c). If using set_f mode, it will do sigma_c * f / Nx.
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb=fb)
-        print("WARNING: this model needs to be updated!! Namely: c_calc has changed, so ghost_z and p_calc need to be changed!!")
+        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb=fb,sigma_c=sigma_c)
+#         print("WARNING: this model needs to be updated!! Namely: c_calc has changed, so ghost_z and p_calc need to be changed!!")
         
         self.sigma_c = sigma_c * np.sqrt(self.f / self.Nx)
+        
+        ### Check if there is a slope:
+        mean_z = np.mean(self.z,axis=0)
+        if np.mean(np.diff(mean_z)) != 0:
+            print("WARNING: you have included a non-zero mean slope. This mode only works for a non-zero mean slope.")
         
     #########################################
     ####       Dynamics and Calcs      ######
@@ -939,8 +977,11 @@ class set_f(ez):
         ## Copies and auxiliary entrainment matrix
         self.e = np.copy(self.ep)    
         
+        if bal:        
+            temp = np.sum(self.e)+np.sum(self.z)
+        
         ## Recalculates dx randomly
-        self.dx_mat = self.dx_calc() 
+        self.dx_mat = self.dx_calc(periodic=True) 
         
         ## Calculates probabilities, given c and e
         self.p = self.p_calc()
@@ -952,12 +993,16 @@ class set_f(ez):
         if bed_feedback:
             self.z = self.z_update(periodic=True) 
 
+        if self.f>0:
+            ## Random entrainment by fluid:
+            self.ep,self.z = self.f_entrain()
+            
         ## Add to time:
         self.tstep += 1
         self.t     += self.dt 
         
         if bal:
-            return np.sum(self.e)+np.sum(self.z)
+            return temp
         else:
             return
 
@@ -969,13 +1014,14 @@ class set_f(ez):
         Calculates and returns probability matrix, given c and e.
         """
         # Set A (what will be the probability matrix) to zero:
-        p_temp = self.f*np.ones((self.Ny,self.Nx)) # Every grid point starts with some small finite probability of being entrained by fluid
+        p_temp = np.zeros((self.Ny,self.Nx))
         
-        for rollx in np.unique(self.dx_mat*self.e):
+        dxs = np.unique(self.dx_mat*self.e)
+        for rollx in dxs[dxs>0]:
             etemp = self.e*(self.dx_mat == rollx) # Only places where self.dx_mat == rollx
-            p_temp += self.c_calc(rollx,0,periodic=True)*np.roll(np.roll(etemp,0,axis=0),rollx,axis = 1)
-            p_temp += self.c_calc(rollx,1,periodic=True)*np.roll(np.roll(etemp,1,axis=0),rollx,axis = 1)
-            p_temp += self.c_calc(rollx,-1,periodic=True)*np.roll(np.roll(etemp,-1,axis=0),rollx,axis = 1)
+            p_temp += self.c_calc(rollx,0)*np.roll(np.roll(etemp,0,axis=0),rollx,axis = 1)
+            p_temp += self.c_calc(rollx,1)*np.roll(np.roll(etemp,1,axis=0),rollx,axis = 1)
+            p_temp += self.c_calc(rollx,-1)*np.roll(np.roll(etemp,-1,axis=0),rollx,axis = 1)
         
         if self.sigma_c==0.0: # In case we want no noise
             cdist = self.c_0
@@ -984,6 +1030,9 @@ class set_f(ez):
         
         # Include fluid feedback:
         p_temp = p_temp*(1-self.fb*self.e)*cdist
+        
+#         # Every grid point has some small finite probability of being entrained by fluid
+#         p_temp += self.f 
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
