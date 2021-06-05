@@ -115,14 +115,12 @@ class ez():
             
         s=(z_temp-np.roll(np.roll(z_temp,rolly,axis=0),rollx,axis = 1))/rollx
         
-        if self.oldc:
-            c_temp = np.sqrt(s**2+1)
+        c_temp = np.sqrt(s**2+1)
 
+        if self.oldc:
             # Setting c = 0 for any slope that is positive
             c_temp[s>0] = 0.0
-
         else:
-            c_temp = (1-s)
             c_temp[s>0] = np.exp(-s[s>0]/2)
         
         return c_temp
