@@ -9,7 +9,7 @@ import random
 
 class ez():
     
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0, fb = 0.3,sigma_c = 0.0):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0, fb = 0.3,sigma_c = 0.0,oldc=True):
         """
         Initialize the model
         Parameters for ez superclass
@@ -37,6 +37,7 @@ class ez():
         self.q_in=0.0 
         self.fb = fb
         self.sigma_c = sigma_c
+        self.oldc=oldc
        
         ####################
         ## INITIAL fields ##
@@ -114,13 +115,15 @@ class ez():
             
         s=(z_temp-np.roll(np.roll(z_temp,rolly,axis=0),rollx,axis = 1))/rollx
         
-#         c_temp = np.sqrt(s**2+1)
-        
-#         # Setting c = 0 for any slope that is positive
-#         c_temp[s>0] = 0.0
+        if self.oldc:
+            c_temp = np.sqrt(s**2+1)
 
-        c_temp = (1-s)
-        c_temp[s>0] = np.exp(-s[s>0]/2)
+            # Setting c = 0 for any slope that is positive
+            c_temp[s>0] = 0.0
+
+        else:
+            c_temp = (1-s)
+            c_temp[s>0] = np.exp(-s[s>0]/2)
         
         return c_temp
 
@@ -738,7 +741,7 @@ class set_q(ez):
 
     (see __init__ help for more info on parameters.)
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,q_in,rho = 1.25,initial=0.0,fb = 0.3,sigma_c = 0.0):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,q_in,rho = 1.25,initial=0.0,fb = 0.3,sigma_c = 0.0,oldc=True):
         """
         Initialize the model
         Parameters for set_q subclass
@@ -755,7 +758,7 @@ class set_q(ez):
         sigma_c (default = 0.0) : if sigma_c is not 0.0, then c_0 will be taken from a normal distribution with mean c_0 and standard deviation sigma_c * sqrt(q_in) (so that, based on the central limit theorem, the standard deviation of the y-averaged c_0 is sigma_c). If using set_f mode, it will do sigma_c * f / Nx.
         q_in: number of entrained particles at top of the bed (flux in). Can be less than one but must be rational! q_in <= Ny!
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb = fb,sigma_c= sigma_c)
+        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb = fb,sigma_c= sigma_c,oldc=oldc)
         ## Input parameters to be communicated to other functions:        
         if q_in>Ny:
             print("q_in > Ny ! Setting q_in = Ny.")
@@ -935,7 +938,7 @@ class set_f(ez):
     In this model, the main input parameter is f, which is the probability that extreme events in fluid stresses entrain a grain and move it downstream.
     The entrained grains flow out of one end and, importantly, come back into the other end: this mode has periodic boundary conditions in all directions.
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.01,fb=0.3,sigma_c = 0.0):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.01,fb=0.3,sigma_c = 0.0,oldc=True):
         """
         Initialize the model
         Parameters for set_f subclass
@@ -951,8 +954,8 @@ class set_f(ez):
         fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
         sigma_c (default = 0.0) : if sigma_c is not 0.0, then c_0 will be taken from a normal distribution with mean c_0 and standard deviation sigma_c * sqrt(q_in) (so that, based on the central limit theorem, the standard deviation of the y-averaged c_0 is sigma_c). If using set_f mode, it will do sigma_c * f / Nx.
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb=fb,sigma_c=sigma_c)
-#         print("WARNING: this model needs to be updated!! Namely: c_calc has changed, so ghost_z and p_calc need to be changed!!")
+        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb=fb,sigma_c=sigma_c,oldc=oldc)
+#         print("WARNING: this model needs to be updated!! Namely: c_calc has changed, so ghost_z, and p_calc need to be changed!!")
         
         self.sigma_c = sigma_c * np.sqrt(self.f / self.Nx)
         
