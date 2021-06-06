@@ -121,7 +121,7 @@ class ez():
             # Setting c = 0 for any slope that is positive
             c_temp[s>0] = 0.0
         else:
-            c_temp[s>0] = np.exp(-s[s>0]/2)
+            c_temp[s>0] = np.exp(-s[s>0]/0.5)
         
         return c_temp
 
@@ -237,19 +237,14 @@ class ez():
         for x in np.argwhere(z_temp_s>0):
             indlist = np.where(self.e[:,x])[0] # will deposit in e locations
             ind = random.sample(indlist.tolist(),k=z_temp_s[x][0])
-#             indn = np.random.choice(len(indlist),z_temp_s[x],replace=False) # randomly pick these locations
-#             ind = indlist[indn]
             z_temp[ind,x] += 1  # deposit
             
         for x in np.argwhere(z_temp_s<0):
-            indlist = np.where(self.ep[:,x[0]:x[0]+np.max(self.dx_mat)+1])[0] # will deposit in locations one downstream of ep
-            indlist = np.unique(indlist)
+            eproll = np.roll(self.ep,-x[0],axis=1)
+            indlist = np.unique(np.where(eproll[:,:np.max(self.dx_mat)+1])[0])
             if len(indlist)<abs(z_temp_s[x][0]):
-#                 indlist= np.concatenate((indlist,np.random.choice(np.setdiff1d(np.arange(self.Ny),indlist),abs(z_temp_s[x][0])-len(indlist),replace=False)))
                 indlist= np.concatenate((indlist,random.sample(np.setdiff1d(np.arange(self.Ny),indlist).tolist(),k=abs(z_temp_s[x][0])-len(indlist))))
             ind = random.sample(indlist.tolist(),k=abs(z_temp_s[x][0]))
-#             indn = np.random.choice(len(indlist),abs(z_temp_s[x][0]),replace=False)
-#             ind = indlist[indn]
             z_temp[ind,x] -= 1 # entrain
         
         # Sets any negative z to zero (although this should not happen...)
@@ -953,7 +948,6 @@ class set_f(ez):
         sigma_c (default = 0.0) : if sigma_c is not 0.0, then c_0 will be taken from a normal distribution with mean c_0 and standard deviation sigma_c * sqrt(q_in) (so that, based on the central limit theorem, the standard deviation of the y-averaged c_0 is sigma_c). If using set_f mode, it will do sigma_c * f / Nx.
         """
         super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb=fb,sigma_c=sigma_c,oldc=oldc)
-#         print("WARNING: this model needs to be updated!! Namely: c_calc has changed, so ghost_z, and p_calc need to be changed!!")
         
         self.sigma_c = sigma_c * np.sqrt(self.f / self.Nx)
         
