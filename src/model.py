@@ -9,7 +9,7 @@ import random
 
 class ez():
     
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0, fb = 0.3,sigma_c = 0.0,oldc=True):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0, fb = 0.3,sigma_c = 0.0,oldc=True,gauss=True):
         """
         Initialize the model
         Parameters for ez superclass
@@ -38,16 +38,19 @@ class ez():
         self.fb = fb
         self.sigma_c = sigma_c
         self.oldc=oldc
+        self.gauss=gauss
        
         ####################
         ## INITIAL fields ##
         ####################
+        # For random numbers:
+        self.rng = np.random.default_rng(12345)
         ## Height. Start with z = 0 everywhere.
 #         self.z = np.zeros((Ny,Nx),dtype=int) # Units of grain radii
         self.bed_h = 100
         self.z = self.bed_h*np.ones((Ny,Nx),dtype=int) # Units of grain radii
         # Start with random number entrained
-        A = np.random.rand(self.Ny,self.Nx)
+        A = self.rng.random(size=(self.Ny,self.Nx))
         self.ep = A<initial
         # The auxiliary e:
         self.e = self.ep.copy()
@@ -91,8 +94,11 @@ class ez():
         p = (a-1)/a
         n = self.skipmax/p
         for i in range(self.Nx):
-            # dx[:,i]=np.random.randint(1,high=self.skipmax+1,size=(self.Ny))
-            dx[:,i]=np.random.binomial(n,p,size=self.Ny)
+            # dx[:,i]=self.rng.randint(1,high=self.skipmax+1,size=(self.Ny))
+            if self.gauss:
+                dx[:,i]=self.rng.binomial(n,p,size=self.Ny)
+            else:
+                dx[:,i]=self.rng.exponential(scale=self.skipmax,size=self.Ny)
 
         if not periodic:
             # Make the top row dx = 1, so that input flux is what we want:
@@ -142,7 +148,7 @@ class ez():
         z_temp = np.copy(self.z)
                 
         #Generate random numbers between zero and one for the whole domain
-        rndc = np.random.uniform(0.0, 1.0,size=(self.Ny,self.Nx))
+        rndc = self.rng.uniform(0.0, 1.0,size=(self.Ny,self.Nx))
         
         # In places where p > rndc, entrainments happen.
         ep_temp[rndc<=p_temp] = True
@@ -186,7 +192,7 @@ class ez():
         A = np.zeros((self.Ny,self.Nx),dtype=bool)
         
         #Generate random numbers between zero and one for the whole domain
-        rndc = np.random.uniform(0.0, 1.0,size=(self.Ny,self.Nx))
+        rndc = self.rng.uniform(0.0, 1.0,size=(self.Ny,self.Nx))
         
         # In places where p > rndc, entrainments happen.
         A[rndc<=self.p] = True
@@ -734,7 +740,7 @@ class set_q(ez):
 
     (see __init__ help for more info on parameters.)
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,q_in,rho = 1.25,initial=0.0,fb = 0.3,sigma_c = 0.0,oldc=True):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,q_in,rho = 1.25,initial=0.0,fb = 0.3,sigma_c = 0.0,oldc=True,gauss=True):
         """
         Initialize the model
         Parameters for set_q subclass
@@ -751,7 +757,7 @@ class set_q(ez):
         sigma_c (default = 0.0) : if sigma_c is not 0.0, then c_0 will be taken from a normal distribution with mean c_0 and standard deviation sigma_c * sqrt(q_in) (so that, based on the central limit theorem, the standard deviation of the y-averaged c_0 is sigma_c). If using set_f mode, it will do sigma_c * f / Nx.
         q_in: number of entrained particles at top of the bed (flux in). Can be less than one but must be rational! q_in <= Ny!
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb = fb,sigma_c= sigma_c,oldc=oldc)
+        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb = fb,sigma_c= sigma_c,oldc=oldc,gauss=gauss)
         ## Input parameters to be communicated to other functions:        
         if q_in>Ny:
             print("q_in > Ny ! Setting q_in = Ny.")
@@ -803,14 +809,14 @@ class set_q(ez):
         if (self.q_in <= 1)&(self.q_in>0):
             if self.tstep % int(1/self.q_in) == 0:
                 indlist = np.where(~self.e[:,0])[0] 
-                indn = np.random.choice(len(indlist),1,replace=False)
+                indn = self.rng.choice(len(indlist),1,replace=False)
                 ind = indlist[indn]
                 self.e[ind,0]=True
             else:
                 pass
         elif self.q_in > 1: 
             indlist = np.where(~self.e[:,0])[0] 
-            indn = np.random.choice(len(indlist),int(self.q_in),replace=False)
+            indn = self.rng.choice(len(indlist),int(self.q_in),replace=False)
             ind = indlist[indn]
             self.e[ind,0]=True
         elif self.q_in == 0:
@@ -878,7 +884,7 @@ class set_q(ez):
         if self.sigma_c==0.0: # In case we want no noise
             cdist = self.c_0
         else:
-            cdist = np.random.normal(size=(self.Ny,self.Nx))*self.sigma_c + self.c_0 
+            cdist = self.rng.normal(size=(self.Ny,self.Nx))*self.sigma_c + self.c_0 
             cdist[cdist<0] = 0.0
         
         # Include fluid feedback:
@@ -931,7 +937,7 @@ class set_f(ez):
     In this model, the main input parameter is f, which is the probability that extreme events in fluid stresses entrain a grain and move it downstream.
     The entrained grains flow out of one end and, importantly, come back into the other end: this mode has periodic boundary conditions in all directions.
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.01,fb=0.3,sigma_c = 0.0,oldc=True):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.01,fb=0.3,sigma_c = 0.0,oldc=True,gauss=True):
         """
         Initialize the model
         Parameters for set_f subclass
@@ -947,7 +953,7 @@ class set_f(ez):
         fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
         sigma_c (default = 0.0) : if sigma_c is not 0.0, then c_0 will be taken from a normal distribution with mean c_0 and standard deviation sigma_c * sqrt(q_in) (so that, based on the central limit theorem, the standard deviation of the y-averaged c_0 is sigma_c). If using set_f mode, it will do sigma_c * f / Nx.
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb=fb,sigma_c=sigma_c,oldc=oldc)
+        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb=fb,sigma_c=sigma_c,oldc=oldc,gauss=gauss)
         
         self.sigma_c = sigma_c * np.sqrt(self.f / self.Nx)
         
@@ -1024,7 +1030,7 @@ class set_f(ez):
         if self.sigma_c==0.0: # In case we want no noise
             cdist = self.c_0
         else:
-            cdist = np.random.normal(size=(self.Ny,self.Nx))*self.sigma_c + self.c_0 
+            cdist = self.rng.normal(size=(self.Ny,self.Nx))*self.sigma_c + self.c_0 
         
         # Include fluid feedback:
         p_temp = p_temp*(1-self.fb*self.e)*cdist
