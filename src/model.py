@@ -87,18 +87,14 @@ class ez():
         """
         Calculates dx from binomial distribution with mean skipmax and variance skipmax/2. Returns dx.
         """            
-        dx = np.zeros((self.Ny,self.Nx),dtype=int)
-    
-        # So that the variance is self.skipmax/a
-        a = 2
-        p = (a-1)/a
-        n = self.skipmax/p
-        for i in range(self.Nx):
-            # dx[:,i]=self.rng.randint(1,high=self.skipmax+1,size=(self.Ny))
-            if self.gauss:
-                dx[:,i]=self.rng.binomial(n,p,size=self.Ny)
-            else:
-                dx[:,i]=self.rng.exponential(scale=self.skipmax,size=self.Ny)
+        if self.gauss:
+            # So that the variance is self.skipmax/a
+            a = 2
+            p = (a-1)/a
+            n = self.skipmax/p
+            dx=self.rng.binomial(n,p,size=self.e.shape)
+        else:
+            dx=self.rng.geometric(1/float(self.skipmax),size=self.e.shape)
 
         if not periodic:
             # Make the top row dx = 1, so that input flux is what we want:
