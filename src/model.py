@@ -109,11 +109,14 @@ class ez():
     # Calculating collision likelyhood based on z.#
     ###############################################
     # c_0     = collision coefficient at zero slope.
-    def c_calc(self,rollx,rolly):
+    def c_calc(self,rollx,rolly,periodic=False):
         """
         Calculates and returns c, given slope with neighbors and c_0.
         """    
-        z_temp = np.copy(self.z)
+        if periodic:
+            z_temp = self.ghost_z(rollx)
+        else:
+            z_temp = np.copy(self.z)
             
         s=(z_temp-np.roll(np.roll(z_temp,rolly,axis=0),rollx,axis = 1))/rollx
         
@@ -125,7 +128,10 @@ class ez():
         else:
             c_temp[s>0] = np.exp(-s[s>0]/0.5)
         
-        return c_temp
+        if periodic:
+            return c_temp[:,rollx:]
+        else:
+            return c_temp
 
 
     ###############################
@@ -154,6 +160,7 @@ class ez():
 #         dxs = self.dx_mat[ys,xs] 
         dxs = self.skipmax # Advecting with mean flow just to avoid overlaps
         xs = (xs-dxs)%self.Nx
+        
         z_temp[ys,xs] -=  1
         
         return ep_temp,z_temp
@@ -261,33 +268,58 @@ class ez():
     #######################
     # Auxiliary functions #
     #######################
-    def ghost_z(self):
+#     def ghost_z(self):
+#         """
+#         Creates an extended domain for the bed. Adds a column upstream of the top and max(x+dx) columns downstream of the bottom.
+#         The height of the extrapolated bed heights are calculated by a linear fit of the *entire* bed and then individual topographic features are added to those ghost points based on the difference between the real bed and the fit in the periodic locations.
+#         Returns the "ghost" z.
+#         """
+#         # How long do we extend for?
+#         maxdx = np.max(np.arange(self.Nx)+self.dx_mat) - self.Nx + 1
+
+#         # Calculate the bed slope:
+#         xs = np.arange(self.Nx+maxdx+1)
+#         bed = np.mean(self.z,axis=0)
+        
+#         # The true bed is now from 1 to Nx in bed_f
+#         m,b = np.polyfit(xs[(1<=xs)&(xs<=self.Nx)],bed,1)
+#         bed_f = np.array(np.round(m*xs+b),dtype=int)
+
+#         # Calculate the pertrusion from the fit
+#         z_diff = self.z[:,:maxdx]-bed_f[1:maxdx+1]
+#         z_diff_t = self.z[:,-1]-bed_f[self.Nx]
+
+#         # Add the extra space
+#         z_t = np.hstack((np.zeros((self.Ny,1),dtype=int),np.copy(self.z),np.zeros((self.Ny,maxdx),dtype=int)))
+
+#         # Add the baseline extrapolated slope + the difference at each point
+#         z_t[:,self.Nx+1:] = bed_f[self.Nx+1:]+z_diff
+#         z_t[:,0] = bed_f[0]+z_diff_t
+        
+#         return z_t
+
+    def ghost_z(self,rollx):
         """
         Creates an extended domain for the bed. Adds a column upstream of the top and max(x+dx) columns downstream of the bottom.
         The height of the extrapolated bed heights are calculated by a linear fit of the *entire* bed and then individual topographic features are added to those ghost points based on the difference between the real bed and the fit in the periodic locations.
         Returns the "ghost" z.
         """
-        # How long do we extend for?
-        maxdx = np.max(np.arange(self.Nx)+self.dx_mat) - self.Nx + 1
-
         # Calculate the bed slope:
-        xs = np.arange(self.Nx+maxdx+1)
+        xs = np.arange(self.Nx+rollx+1)
         bed = np.mean(self.z,axis=0)
-        
-        # The true bed is now from 1 to Nx in bed_f
-        m,b = np.polyfit(xs[(1<=xs)&(xs<=self.Nx)],bed,1)
+
+        # The true bed is now from 1+rollx to Nx in bed_f
+        m,b = np.polyfit(xs[(1+rollx)<=xs],bed,1)
         bed_f = np.array(np.round(m*xs+b),dtype=int)
 
         # Calculate the pertrusion from the fit
-        z_diff = self.z[:,:maxdx]-bed_f[1:maxdx+1]
-        z_diff_t = self.z[:,-1]-bed_f[self.Nx]
+        z_diff = self.z[:,-rollx:]-bed_f[-rollx:]
 
         # Add the extra space
-        z_t = np.hstack((np.zeros((self.Ny,1),dtype=int),np.copy(self.z),np.zeros((self.Ny,maxdx),dtype=int)))
+        z_t = np.hstack((np.zeros((self.Ny,rollx),dtype=int),np.copy(self.z)))
 
         # Add the baseline extrapolated slope + the difference at each point
-        z_t[:,self.Nx+1:] = bed_f[self.Nx+1:]+z_diff
-        z_t[:,0] = bed_f[0]+z_diff_t
+        z_t[:,:rollx] = bed_f[:rollx]+z_diff
         
         return z_t
     
@@ -1019,9 +1051,9 @@ class set_f(ez):
         dxs = np.unique(self.dx_mat*self.e)
         for rollx in dxs[dxs>0]:
             etemp = self.e*(self.dx_mat == rollx) # Only places where self.dx_mat == rollx
-            p_temp += self.c_calc(rollx,0)*np.roll(np.roll(etemp,0,axis=0),rollx,axis = 1)
-            p_temp += self.c_calc(rollx,1)*np.roll(np.roll(etemp,1,axis=0),rollx,axis = 1)
-            p_temp += self.c_calc(rollx,-1)*np.roll(np.roll(etemp,-1,axis=0),rollx,axis = 1)
+            p_temp += self.c_calc(rollx,0,periodic=True)*np.roll(np.roll(etemp,0,axis=0),rollx,axis = 1)
+            p_temp += self.c_calc(rollx,1,periodic=True)*np.roll(np.roll(etemp,1,axis=0),rollx,axis = 1)
+            p_temp += self.c_calc(rollx,-1,periodic=True)*np.roll(np.roll(etemp,-1,axis=0),rollx,axis = 1)
         
         if self.sigma_c==0.0: # In case we want no noise
             cdist = self.c_0
