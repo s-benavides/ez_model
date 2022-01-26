@@ -342,14 +342,15 @@ class ez():
         Imports .h5 file with given name and sets the state of the model. Note that you can also manually set the state by calling the 
         'set_state' fuction.
         """
-        f = h5py.File(name,'r')
-        self.tstep = f['state']['tstep'][-1]
-        self.t = f['state']['time'][-1]
-        self.z = f['state']['z'][-1]
-        self.e = f['state']['e'][-1]
-        self.p = f['state']['p'][-1]
-        self.dx_mat = f['state']['dx_mat'][-1]
-        f.close()
+        # f = h5py.File(name,'r')
+        with h5py.File(name,'r') as f:
+            self.tstep = f['state']['tstep'][-1]
+            self.t = f['state']['time'][-1]
+            self.z = f['state']['z'][-1]
+            self.e = f['state']['e'][-1]
+            self.p = f['state']['p'][-1]
+            self.dx_mat = f['state']['dx_mat'][-1]
+        # f.close()
 
         return 
 
@@ -367,31 +368,14 @@ class ez():
         """
         fname = odir+ self.export_name() +'_state.h5'
         if not path.exists(fname):
-            f = h5py.File(fname,'w')
-            # Parameters
-            params = f.create_group('parameters')
-            paramdict = self.get_params()
-            for k, v in paramdict.items():
-                params.create_dataset(k, data=np.array(v))
-
-            # State of simulation
-            state = f.create_group('state')
-            state.create_dataset('tstep', data = [self.tstep],maxshape=(None,),chunks=True)
-            state.create_dataset('time', data = [self.t],maxshape=(None,),chunks=True)
-            state.create_dataset('z', data = [self.z],maxshape=(None,np.shape(self.z)[0],np.shape(self.z)[1]),chunks=True)
-            state.create_dataset('e', data = [self.e],maxshape=(None,np.shape(self.e)[0],np.shape(self.e)[1]),chunks=True)
-            state.create_dataset('p', data = [self.p],maxshape=(None,np.shape(self.p)[0],np.shape(self.p)[1]),chunks=True)
-            state.create_dataset('dx_mat', data = [self.dx_mat],maxshape=(None,np.shape(self.dx_mat)[0],np.shape(self.dx_mat)[1]),chunks=True)
-        else:
-            if overwrite:
-                f = h5py.File(fname,'w')
-                
+            # f = h5py.File(fname,'w')
+            with h5py.File(fname,'w') as f:
                 # Parameters
                 params = f.create_group('parameters')
                 paramdict = self.get_params()
                 for k, v in paramdict.items():
                     params.create_dataset(k, data=np.array(v))
-    
+
                 # State of simulation
                 state = f.create_group('state')
                 state.create_dataset('tstep', data = [self.tstep],maxshape=(None,),chunks=True)
@@ -400,23 +384,42 @@ class ez():
                 state.create_dataset('e', data = [self.e],maxshape=(None,np.shape(self.e)[0],np.shape(self.e)[1]),chunks=True)
                 state.create_dataset('p', data = [self.p],maxshape=(None,np.shape(self.p)[0],np.shape(self.p)[1]),chunks=True)
                 state.create_dataset('dx_mat', data = [self.dx_mat],maxshape=(None,np.shape(self.dx_mat)[0],np.shape(self.dx_mat)[1]),chunks=True)
-            else:
-                f = h5py.File(fname,'a')
-                state = f['state']
-                state['tstep'].resize((state['tstep'].shape[0] + 1), axis = 0)
-                state['tstep'][-1:] = [self.tstep]
-                state['time'].resize((state['time'].shape[0] + 1), axis = 0)
-                state['time'][-1:] = [self.t]
-                state['z'].resize((state['z'].shape[0] + 1), axis = 0)
-                state['z'][-1:] = [self.z]
-                state['e'].resize((state['e'].shape[0] + 1), axis = 0)
-                state['e'][-1:] = [self.e]
-                state['p'].resize((state['p'].shape[0] + 1), axis = 0)
-                state['p'][-1:] = [self.p]
-                state['dx_mat'].resize((state['dx_mat'].shape[0] + 1), axis = 0)
-                state['dx_mat'][-1:] = [self.dx_mat]
+        else:
+            if overwrite:
+                # f = h5py.File(fname,'w')
+                with h5py.File(fname,'w') as f:
+                    # Parameters
+                    params = f.create_group('parameters')
+                    paramdict = self.get_params()
+                    for k, v in paramdict.items():
+                        params.create_dataset(k, data=np.array(v))
 
-        f.close()
+                    # State of simulation
+                    state = f.create_group('state')
+                    state.create_dataset('tstep', data = [self.tstep],maxshape=(None,),chunks=True)
+                    state.create_dataset('time', data = [self.t],maxshape=(None,),chunks=True)
+                    state.create_dataset('z', data = [self.z],maxshape=(None,np.shape(self.z)[0],np.shape(self.z)[1]),chunks=True)
+                    state.create_dataset('e', data = [self.e],maxshape=(None,np.shape(self.e)[0],np.shape(self.e)[1]),chunks=True)
+                    state.create_dataset('p', data = [self.p],maxshape=(None,np.shape(self.p)[0],np.shape(self.p)[1]),chunks=True)
+                    state.create_dataset('dx_mat', data = [self.dx_mat],maxshape=(None,np.shape(self.dx_mat)[0],np.shape(self.dx_mat)[1]),chunks=True)
+            else:
+                # f = h5py.File(fname,'a')
+                with h5py.File(fname,'a') as f:
+                    state = f['state']
+                    state['tstep'].resize((state['tstep'].shape[0] + 1), axis = 0)
+                    state['tstep'][-1:] = [self.tstep]
+                    state['time'].resize((state['time'].shape[0] + 1), axis = 0)
+                    state['time'][-1:] = [self.t]
+                    state['z'].resize((state['z'].shape[0] + 1), axis = 0)
+                    state['z'][-1:] = [self.z]
+                    state['e'].resize((state['e'].shape[0] + 1), axis = 0)
+                    state['e'][-1:] = [self.e]
+                    state['p'].resize((state['p'].shape[0] + 1), axis = 0)
+                    state['p'][-1:] = [self.p]
+                    state['dx_mat'].resize((state['dx_mat'].shape[0] + 1), axis = 0)
+                    state['dx_mat'][-1:] = [self.dx_mat]
+
+        # f.close()
         return
 
     def export_scalars(self,odir,data,overwrite=True):
@@ -435,19 +438,9 @@ class ez():
         """
         fname = odir+ self.export_name() +'_scalars.h5'
         if not path.exists(fname):
-            f = h5py.File(fname,'w')
-            # Parameters
-            params = f.create_group('parameters')
-            for k, v in self.get_params().items():
-                params.create_dataset(k, data=np.array(v))
-
-            scalars = f.create_group('scalars')
-            for ii,d in enumerate(np.array(data).T):
-                scalars.create_dataset(self.okeys[ii],data=np.array(d))
-        
-        else:
-            if overwrite:
-                f = h5py.File(fname,'w')
+            # f = h5py.File(fname,'w')
+            with h5py.File(fname,'w') as f:
+                # Parameters
                 params = f.create_group('parameters')
                 for k, v in self.get_params().items():
                     params.create_dataset(k, data=np.array(v))
@@ -455,13 +448,26 @@ class ez():
                 scalars = f.create_group('scalars')
                 for ii,d in enumerate(np.array(data).T):
                     scalars.create_dataset(self.okeys[ii],data=np.array(d))
-            else:
-                f = h5py.File(fname,'a')
-                for ii,d in enumerate(np.array(data).T):
-                    del f['scalars'][self.okeys[ii]]
-                    f['scalars'][self.okeys[ii]] = np.array(d)
+        
+        else:
+            if overwrite:
+                # f = h5py.File(fname,'w')
+                with h5py.File(fname,'w') as f:
+                    params = f.create_group('parameters')
+                    for k, v in self.get_params().items():
+                        params.create_dataset(k, data=np.array(v))
 
-        f.close()
+                    scalars = f.create_group('scalars')
+                    for ii,d in enumerate(np.array(data).T):
+                        scalars.create_dataset(self.okeys[ii],data=np.array(d))
+            else:
+                # f = h5py.File(fname,'a')
+                with h5py.File(fname,'a') as f:
+                    for ii,d in enumerate(np.array(data).T):
+                        del f['scalars'][self.okeys[ii]]
+                        f['scalars'][self.okeys[ii]] = np.array(d)
+
+        # f.close()
         return
 
     #########################################
