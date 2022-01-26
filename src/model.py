@@ -9,7 +9,7 @@ import random
 
 class ez():
     
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0, fb = 0.3,sigma_c = 0.0,oldc=True,gauss=True):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0, fb = 0.3,sigma_c = 0.0,oldc=True,gauss=True,slope=0):
         """
         Initialize the model
         Parameters for ez superclass
@@ -39,16 +39,13 @@ class ez():
         self.sigma_c = sigma_c
         self.oldc=oldc
         self.gauss=gauss
+        self.slope=slope
        
         ####################
         ## INITIAL fields ##
         ####################
         # For random numbers:
         self.rng = np.random.default_rng(12345)
-        ## Height. Start with z = 0 everywhere.
-#         self.z = np.zeros((Ny,Nx),dtype=int) # Units of grain radii
-        self.bed_h = 100
-        self.z = self.bed_h*np.ones((Ny,Nx),dtype=int) # Units of grain radii
         # Start with random number entrained
         A = self.rng.random(size=(self.Ny,self.Nx))
         self.ep = A<initial
@@ -58,7 +55,7 @@ class ez():
         self.p = np.zeros((Ny,Nx))
         ## Time:
         self.t = 0.0
-        self.tstep = int(0)             
+        self.tstep = int(0)
         
         # Other parameters
         self.x = np.linspace(0,1,self.Nx)
@@ -68,6 +65,12 @@ class ez():
         self.Q = 0.75*np.pi**(-1)*self.rho*(self.g*self.dx)**(0.5)*self.dt
         self.norm = self.Ny*self.dt*(3/4.)*np.pi**(-1)*self.rho
         self.q8in = self.q_in / self.norm
+        
+        ## Build initial bed
+        self.bed_h = 500
+        self.z = self.bed_h*np.ones((Ny,Nx),dtype=int) # Units of grain radii
+        if slope>0:
+            self.z=self.build_bed(slope)
         
         ## Initiates calculations:
         # Hop lengths
@@ -268,50 +271,20 @@ class ez():
     #######################
     # Auxiliary functions #
     #######################
-#     def ghost_z(self):
-#         """
-#         Creates an extended domain for the bed. Adds a column upstream of the top and max(x+dx) columns downstream of the bottom.
-#         The height of the extrapolated bed heights are calculated by a linear fit of the *entire* bed and then individual topographic features are added to those ghost points based on the difference between the real bed and the fit in the periodic locations.
-#         Returns the "ghost" z.
-#         """
-#         # How long do we extend for?
-#         maxdx = np.max(np.arange(self.Nx)+self.dx_mat) - self.Nx + 1
-
-#         # Calculate the bed slope:
-#         xs = np.arange(self.Nx+maxdx+1)
-#         bed = np.mean(self.z,axis=0)
-        
-#         # The true bed is now from 1 to Nx in bed_f
-#         m,b = np.polyfit(xs[(1<=xs)&(xs<=self.Nx)],bed,1)
-#         bed_f = np.array(np.round(m*xs+b),dtype=int)
-
-#         # Calculate the pertrusion from the fit
-#         z_diff = self.z[:,:maxdx]-bed_f[1:maxdx+1]
-#         z_diff_t = self.z[:,-1]-bed_f[self.Nx]
-
-#         # Add the extra space
-#         z_t = np.hstack((np.zeros((self.Ny,1),dtype=int),np.copy(self.z),np.zeros((self.Ny,maxdx),dtype=int)))
-
-#         # Add the baseline extrapolated slope + the difference at each point
-#         z_t[:,self.Nx+1:] = bed_f[self.Nx+1:]+z_diff
-#         z_t[:,0] = bed_f[0]+z_diff_t
-        
-#         return z_t
-
     def ghost_z(self,rollx):
         """
-        Creates an extended domain for the bed. Adds a column upstream of the top and max(x+dx) columns downstream of the bottom.
+        Creates an extended domain for the bed. Adds max(dx) columns upstream of the top.
         The height of the extrapolated bed heights are calculated by a linear fit of the *entire* bed and then individual topographic features are added to those ghost points based on the difference between the real bed and the fit in the periodic locations.
         Returns the "ghost" z.
         """
         # Calculate the bed slope:
-        xs = np.arange(self.Nx+rollx+1)
-        bed = np.mean(self.z,axis=0)
+        xs = np.arange(-rollx,self.Nx)
+        bed = np.mean(self.build_bed(self.slope),axis=0)
 
         # The true bed is now from 1+rollx to Nx in bed_f
-        m,b = np.polyfit(xs[(1+rollx)<=xs],bed,1)
+        m,b = np.polyfit(xs[int(self.Nx/4)+rollx:-int(self.Nx/4)],bed[int(self.Nx/4):-int(self.Nx/4)],1)
         bed_f = np.array(np.round(m*xs+b),dtype=int)
-
+        
         # Calculate the pertrusion from the fit
         z_diff = self.z[:,-rollx:]-bed_f[-rollx:]
 
@@ -768,7 +741,7 @@ class set_q(ez):
 
     (see __init__ help for more info on parameters.)
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,q_in,rho = 1.25,initial=0.0,fb = 0.3,sigma_c = 0.0,oldc=True,gauss=True):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,q_in,rho = 1.25,initial=0.0,fb = 0.3,sigma_c = 0.0,oldc=True,gauss=True,slope=0):
         """
         Initialize the model
         Parameters for set_q subclass
@@ -785,7 +758,7 @@ class set_q(ez):
         sigma_c (default = 0.0) : if sigma_c is not 0.0, then c_0 will be taken from a normal distribution with mean c_0 and standard deviation sigma_c * sqrt(q_in) (so that, based on the central limit theorem, the standard deviation of the y-averaged c_0 is sigma_c). If using set_f mode, it will do sigma_c * f / Nx.
         q_in: number of entrained particles at top of the bed (flux in). Can be less than one but must be rational! q_in <= Ny!
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb = fb,sigma_c= sigma_c,oldc=oldc,gauss=gauss)
+        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb = fb,sigma_c= sigma_c,oldc=oldc,gauss=gauss,slope=slope)
         ## Input parameters to be communicated to other functions:        
         if q_in>Ny:
             print("q_in > Ny ! Setting q_in = Ny.")
@@ -965,7 +938,7 @@ class set_f(ez):
     In this model, the main input parameter is f, which is the probability that extreme events in fluid stresses entrain a grain and move it downstream.
     The entrained grains flow out of one end and, importantly, come back into the other end: this mode has periodic boundary conditions in all directions.
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.01,fb=0.3,sigma_c = 0.0,oldc=True,gauss=True):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0,fb=0.3,sigma_c = 0.0,oldc=True,gauss=True,slope=0):
         """
         Initialize the model
         Parameters for set_f subclass
@@ -981,14 +954,9 @@ class set_f(ez):
         fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
         sigma_c (default = 0.0) : if sigma_c is not 0.0, then c_0 will be taken from a normal distribution with mean c_0 and standard deviation sigma_c * sqrt(q_in) (so that, based on the central limit theorem, the standard deviation of the y-averaged c_0 is sigma_c). If using set_f mode, it will do sigma_c * f / Nx.
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb=fb,sigma_c=sigma_c,oldc=oldc,gauss=gauss)
+        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb=fb,sigma_c=sigma_c,oldc=oldc,gauss=gauss,slope=slope)
         
         self.sigma_c = sigma_c * np.sqrt(self.f / self.Nx)
-        
-        ### Check if there is a slope:
-        mean_z = np.mean(self.z,axis=0)
-        if np.mean(np.diff(mean_z)) != 0:
-            print("WARNING: you have included a non-zero mean slope. This mode only works for a non-zero mean slope.")
         
     #########################################
     ####       Dynamics and Calcs      ######
@@ -1027,8 +995,11 @@ class set_f(ez):
 
         if self.f>0:
             ## Random entrainment by fluid:
-            self.ep,self.z = self.f_entrain()
-            
+            if bed_feedback:
+                self.ep,self.z = self.f_entrain()
+            else:
+                self.ep, _ = self.f_entrain()
+                
         ## Add to time:
         self.tstep += 1
         self.t     += self.dt 
