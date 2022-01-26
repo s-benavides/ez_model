@@ -313,9 +313,9 @@ class ez():
  
     def get_state(self):
         """
-        Get current state of model: returns [tstep,t,z,e,p,dx_mat]
+        Get current state of model: returns [tstep,t,z,ep,p,dx_mat]
         """
-        return [self.tstep,self.t,self.z,self.e,self.p,self.dx_mat]
+        return [self.tstep,self.t,self.z,self.ep,self.p,self.dx_mat]
 
     def get_params(self):
         """
@@ -327,14 +327,14 @@ class ez():
         """
         Get scalar outputs of model: returns [tstep, time, bed_activity, q_mid,e_mid,e_last]
         """
-        return [self.tstep,self.t,self.bed_activity(),self.q_profile_calc()[int(self.Nx/2)],np.sum(self.e,axis=0)[int(self.Nx/2)],np.sum(self.e,axis=0)[-1]]
+        return [self.tstep,self.t,self.bed_activity(),self.q_profile_calc()[int(self.Nx/2)],np.sum(self.ep,axis=0)[int(self.Nx/2)],np.sum(self.ep,axis=0)[-1]]
     
     def set_state(self,data):
         """
-        Set current state of model: input must be in format [tstep,t,z,e,p,dx_mat]. To be used with 'load_data'. 
+        Set current state of model: input must be in format [tstep,t,z,ep,p,dx_mat]. To be used with 'load_data'. 
         No need to use set_state unless you want to manually create a dataset.
         """
-        [self.tstep,self.t,self.z,self.e,self.p,self.dx_mat] = data
+        [self.tstep,self.t,self.z,self.ep,self.p,self.dx_mat] = data
         return
     
     def load_data(self,name):
@@ -346,7 +346,7 @@ class ez():
             self.tstep = f['state']['tstep'][-1]
             self.t = f['state']['time'][-1]
             self.z = f['state']['z'][-1]
-            self.e = f['state']['e'][-1]
+            self.ep = f['state']['ep'][-1]
             self.p = f['state']['p'][-1]
             self.dx_mat = f['state']['dx_mat'][-1]
 
@@ -361,7 +361,7 @@ class ez():
         Exports odir+ self.export_name() +'_state.h5' file, 
         which contains two groups: 
             1) 'parameters' (depends on the mode)
-            2) 'state' [tstep,t,z,e,p]
+            2) 'state' [tstep,t,z,ep,p]
         into directory 'odir'.
         """
         fname = odir+ self.export_name() +'_state.h5'
@@ -378,7 +378,7 @@ class ez():
                 state.create_dataset('tstep', data = [self.tstep],maxshape=(None,),chunks=True)
                 state.create_dataset('time', data = [self.t],maxshape=(None,),chunks=True)
                 state.create_dataset('z', data = [self.z],maxshape=(None,np.shape(self.z)[0],np.shape(self.z)[1]),chunks=True)
-                state.create_dataset('e', data = [self.e],maxshape=(None,np.shape(self.e)[0],np.shape(self.e)[1]),chunks=True)
+                state.create_dataset('ep', data = [self.ep],maxshape=(None,np.shape(self.ep)[0],np.shape(self.ep)[1]),chunks=True)
                 state.create_dataset('p', data = [self.p],maxshape=(None,np.shape(self.p)[0],np.shape(self.p)[1]),chunks=True)
                 state.create_dataset('dx_mat', data = [self.dx_mat],maxshape=(None,np.shape(self.dx_mat)[0],np.shape(self.dx_mat)[1]),chunks=True)
         else:
@@ -395,7 +395,7 @@ class ez():
                     state.create_dataset('tstep', data = [self.tstep],maxshape=(None,),chunks=True)
                     state.create_dataset('time', data = [self.t],maxshape=(None,),chunks=True)
                     state.create_dataset('z', data = [self.z],maxshape=(None,np.shape(self.z)[0],np.shape(self.z)[1]),chunks=True)
-                    state.create_dataset('e', data = [self.e],maxshape=(None,np.shape(self.e)[0],np.shape(self.e)[1]),chunks=True)
+                    state.create_dataset('ep', data = [self.ep],maxshape=(None,np.shape(self.ep)[0],np.shape(self.ep)[1]),chunks=True)
                     state.create_dataset('p', data = [self.p],maxshape=(None,np.shape(self.p)[0],np.shape(self.p)[1]),chunks=True)
                     state.create_dataset('dx_mat', data = [self.dx_mat],maxshape=(None,np.shape(self.dx_mat)[0],np.shape(self.dx_mat)[1]),chunks=True)
             else:
@@ -407,8 +407,8 @@ class ez():
                     state['time'][-1:] = [self.t]
                     state['z'].resize((state['z'].shape[0] + 1), axis = 0)
                     state['z'][-1:] = [self.z]
-                    state['e'].resize((state['e'].shape[0] + 1), axis = 0)
-                    state['e'][-1:] = [self.e]
+                    state['ep'].resize((state['ep'].shape[0] + 1), axis = 0)
+                    state['ep'][-1:] = [self.ep]
                     state['p'].resize((state['p'].shape[0] + 1), axis = 0)
                     state['p'][-1:] = [self.p]
                     state['dx_mat'].resize((state['dx_mat'].shape[0] + 1), axis = 0)
