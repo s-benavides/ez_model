@@ -9,7 +9,7 @@ import random
 
 class ez():
     
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0, fb = 0.3,oldc=True,gauss=True,slope=0):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0, fb = 0.3,gauss=True,slope=0):
         """
         Initialize the model
         Parameters for ez superclass
@@ -35,7 +35,6 @@ class ez():
         self.rho = rho
         self.q_in=0.0 
         self.fb = fb
-        self.oldc=oldc
         self.gauss=gauss
         self.slope=slope
        
@@ -123,11 +122,8 @@ class ez():
         
         c_temp = np.sqrt(s**2+1)
 
-        if self.oldc:
-            # Setting c = 0 for any slope that is positive
-            c_temp[s>0] = 0.0
-        else:
-            c_temp[s>0] = np.exp(-s[s>0]/0.5)
+        # Setting c = 0 for any slope that is positive
+        c_temp[s>0] = 0.0
         
         if periodic:
             return c_temp[:,rollx:]
@@ -732,7 +728,7 @@ class set_q(ez):
 
     (see __init__ help for more info on parameters.)
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,q_in,rho = 1.25,initial=0.0,fb = 0.3,oldc=True,gauss=True,slope=0):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,q_in,rho = 1.25,initial=0.0,fb = 0.3,gauss=True,slope=0):
         """
         Initialize the model
         Parameters for set_q subclass
@@ -748,7 +744,7 @@ class set_q(ez):
         fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
         q_in: number of entrained particles at top of the bed (flux in). Can be less than one but must be rational! q_in <= Ny!
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb = fb,oldc=oldc,gauss=gauss,slope=slope)
+        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb = fb,gauss=gauss,slope=slope)
         ## Input parameters to be communicated to other functions:        
         if q_in>Ny:
             print("q_in > Ny ! Setting q_in = Ny.")
@@ -916,7 +912,7 @@ class set_f(ez):
     In this model, the main input parameter is f, which is the probability that extreme events in fluid stresses entrain a grain and move it downstream.
     The entrained grains flow out of one end and, importantly, come back into the other end: this mode has periodic boundary conditions in all directions.
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0,fb=0.3,oldc=True,gauss=True,slope=0):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0,fb=0.3,gauss=True,slope=0):
         """
         Initialize the model
         Parameters for set_f subclass
@@ -931,7 +927,7 @@ class set_f(ez):
         initial: initial condition -- all sites are activated with a probability equal to initial
         fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb=fb,oldc=oldc,gauss=gauss,slope=slope)
+        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb=fb,gauss=gauss,slope=slope)
         
         
     #########################################
