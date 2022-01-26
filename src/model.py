@@ -868,9 +868,6 @@ class set_q(ez):
         # Include fluid feedback:
         p_temp = p_temp*(1-self.fb*self.e)*self.c_0
         
-#         # Every grid point has some small finite probability of being entrained by fluid
-#         p_temp += self.f 
-        
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
         
@@ -1000,9 +997,6 @@ class set_f(ez):
         
         # Include fluid feedback:
         p_temp = p_temp*(1-self.fb*self.e)*self.c_0
-        
-#         # Every grid point has some small finite probability of being entrained by fluid
-#         p_temp += self.f 
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
