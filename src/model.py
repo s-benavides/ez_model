@@ -9,7 +9,7 @@ import random
 
 class ez():
     
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0, fb = 0.3,gauss=True,slope=0):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0, fb = 0.3,gauss=True,slope=0,water_h=np.nan):
         """
         Initialize the model
         Parameters for ez superclass
@@ -37,6 +37,7 @@ class ez():
         self.fb = fb
         self.gauss=gauss
         self.slope=slope
+        self.water_h = water_h # Water level above initial bed.
        
         ####################
         ## INITIAL fields ##
@@ -53,6 +54,7 @@ class ez():
         ## Time:
         self.t = 0.0
         self.tstep = int(0)
+        self.mask = np.ones(self.e.shape,dtype=bool)
         
         # Other parameters
         self.x = np.linspace(0,1,self.Nx)
@@ -141,6 +143,19 @@ class ez():
         
         # Set A (what will be the probability matrix) to zero:
         p_temp = self.f*np.ones((self.Ny,self.Nx))
+        
+        # Apply mask:
+        p_temp *= self.mask
+        
+        # If water_h not nan, then apply water height dependence (based on initial bed):
+        if ~np.isnan(self.water_h):
+            diff = (self.build_bed(self.slope)+self.water_h - self.z)
+            max_diff = np.max(diff)
+            decay = max_diff/6
+            p_temp *= (1+np.exp(-2*(diff-max_diff/2)/decay))**(-1)
+            
+        # # Include fluid feedback:
+        # p_temp *= (1-self.fb*self.e)        
                 
         # Copy of arrays of interest
         ep_temp = np.copy(self.ep)
@@ -254,9 +269,9 @@ class ez():
             z_temp[ind,x] -= 1 # entrain
         
         # Sets any negative z to zero (although this should not happen...)
-        if (z_temp<0).any():
-            print("NEGATIVE Z!")
-            print(np.where(z_temp<0))
+        # if (z_temp<0).any():
+        #     print("NEGATIVE Z!")
+        #     print(np.where(z_temp<0))
         z_temp[z_temp<0] = 0
     
         
@@ -724,7 +739,7 @@ class set_q(ez):
 
     (see __init__ help for more info on parameters.)
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,q_in,rho = 1.25,initial=0.0,fb = 0.3,gauss=True,slope=0):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,q_in,rho = 1.25,initial=0.0,fb = 0.3,gauss=True,slope=0,water_h=np.nan):
         """
         Initialize the model
         Parameters for set_q subclass
@@ -740,7 +755,7 @@ class set_q(ez):
         fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
         q_in: number of entrained particles at top of the bed (flux in). Can be less than one but must be rational! q_in <= Ny!
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb = fb,gauss=gauss,slope=slope)
+        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb = fb,gauss=gauss,slope=slope,water_h=water_h)
         ## Input parameters to be communicated to other functions:        
         if q_in>Ny:
             print("q_in > Ny ! Setting q_in = Ny.")
@@ -795,7 +810,7 @@ class set_q(ez):
             else:
                 pass
         elif self.q_in > 1: 
-            indlist = np.where(~self.e[:,0])[0] 
+            indlist = np.where(~self.e[:,0])[0]
             indn = self.rng.choice(len(indlist),int(self.q_in),replace=False)
             ind = indlist[indn]
             self.e[ind,0]=True
@@ -864,6 +879,16 @@ class set_q(ez):
         # Include fluid feedback:
         p_temp = p_temp*(1-self.fb*self.e)*self.c_0
         
+        # Apply mask:
+        p_temp *= self.mask
+        
+        # If water_h not nan, then apply water height dependence:
+        if ~np.isnan(self.water_h):
+            diff = (self.build_bed(self.slope)+self.water_h - self.z)
+            max_diff = np.max(diff)
+            decay = max_diff/6
+            p_temp *= (1+np.exp(-2*(diff-max_diff/2)/decay))**(-1)
+        
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
         
@@ -905,7 +930,7 @@ class set_f(ez):
     In this model, the main input parameter is f, which is the probability that extreme events in fluid stresses entrain a grain and move it downstream.
     The entrained grains flow out of one end and, importantly, come back into the other end: this mode has periodic boundary conditions in all directions.
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0,fb=0.3,gauss=True,slope=0):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0,fb=0.3,gauss=True,slope=0,water_h=np.nan):
         """
         Initialize the model
         Parameters for set_f subclass
@@ -920,7 +945,7 @@ class set_f(ez):
         initial: initial condition -- all sites are activated with a probability equal to initial
         fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb=fb,gauss=gauss,slope=slope)
+        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb=fb,gauss=gauss,slope=slope,water_h=water_h)
         
         
     #########################################
@@ -993,6 +1018,16 @@ class set_f(ez):
         
         # Include fluid feedback:
         p_temp = p_temp*(1-self.fb*self.e)*self.c_0
+        
+        # Apply mask:
+        p_temp *= self.mask
+        
+        # If water_h not nan, then apply water height dependence:
+        if ~np.isnan(self.water_h):
+            diff = (self.build_bed(self.slope)+self.water_h - self.z)
+            max_diff = np.max(diff)
+            decay = max_diff/6
+            p_temp *= (1+np.exp(-2*(diff-max_diff/2)/decay))**(-1)
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
