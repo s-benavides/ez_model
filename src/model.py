@@ -352,18 +352,18 @@ class ez():
         [self.tstep,self.t,self.z,self.ep,self.p,self.dx_mat] = data
         return
     
-    def load_data(self,name):
+    def load_data(self,name,num = -1):
         """
         Imports .h5 file with given name and sets the state of the model. Note that you can also manually set the state by calling the 
         'set_state' fuction.
         """
         with h5py.File(name,'r') as f:
-            self.tstep = f['state']['tstep'][-1]
-            self.t = f['state']['time'][-1]
-            self.z = f['state']['z'][-1]
-            self.ep = f['state']['ep'][-1]
-            self.p = f['state']['p'][-1]
-            self.dx_mat = f['state']['dx_mat'][-1]
+            self.tstep = f['state']['tstep'][num]
+            self.t = f['state']['time'][num]
+            self.z = f['state']['z'][num]
+            self.ep = f['state']['ep'][num]
+            self.p = f['state']['p'][num]
+            self.dx_mat = f['state']['dx_mat'][num]
 
         return 
 
