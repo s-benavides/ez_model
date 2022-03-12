@@ -351,18 +351,18 @@ class ez():
         [self.tstep,self.t,self.z,self.ep,self.p,self.dx_mat] = data
         return
     
-    def load_data(self,name):
+    def load_data(self,name,num = -1):
         """
         Imports .h5 file with given name and sets the state of the model. Note that you can also manually set the state by calling the 
         'set_state' fuction.
         """
         with h5py.File(name,'r') as f:
-            self.tstep = f['state']['tstep'][-1]
-            self.t = f['state']['time'][-1]
-            self.z = f['state']['z'][-1]
-            self.ep = f['state']['ep'][-1]
-            self.p = f['state']['p'][-1]
-            self.dx_mat = f['state']['dx_mat'][-1]
+            self.tstep = f['state']['tstep'][num]
+            self.t = f['state']['time'][num]
+            self.z = f['state']['z'][num]
+            self.ep = f['state']['ep'][num]
+            self.p = f['state']['p'][num]
+            self.dx_mat = f['state']['dx_mat'][num]
 
         return 
 
@@ -484,7 +484,7 @@ class ez():
         import matplotlib.pyplot as plt
         import matplotlib.cm as cm
         fig,(ax1,ax2,ax3)=plt.subplots(3,1,figsize=(8,8))
-        ax1.imshow(self.e,vmin=0,vmax=1,cmap='binary',aspect=self.Nx/(5*self.Ny))
+        ax1.imshow(self.ep,vmin=0,vmax=1,cmap='binary',aspect=self.Nx/(5*self.Ny))
         ax1.set_xticklabels([])
         ax1.set_yticklabels([])
         ax1.tick_params(axis='both',bottom=False,left=False)
@@ -522,8 +522,8 @@ class ez():
         Plots all fields:
         """
         import matplotlib.pyplot as plt
-        out = self.get_state()[2:] #[tstep,t,z,e,p,dx_mat]
-        names = ['z','e','p','hop length']
+        out = self.get_state()[2:] #[tstep,t,z,ep,p,dx_mat]
+        names = ['z','ep','p','hop length']
         for ii,field in enumerate(out):
             im=plt.imshow(field)
             plt.title("%s" % names[ii])
