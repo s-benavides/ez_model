@@ -151,8 +151,7 @@ class ez():
         if ~np.isnan(self.water_h):
             diff = (self.build_bed(self.slope)+self.water_h - self.z)
             max_diff = np.max(diff)
-            decay = max_diff/6
-            p_temp *= (1+np.exp(-2*(diff-max_diff/2)/decay))**(-1)
+            p_temp *= diff/max_diff
             
         # # Include fluid feedback:
         # p_temp *= (1-self.fb*self.e)        
@@ -886,8 +885,7 @@ class set_q(ez):
         if ~np.isnan(self.water_h):
             diff = (self.build_bed(self.slope)+self.water_h - self.z)
             max_diff = np.max(diff)
-            decay = max_diff/6
-            p_temp *= (1+np.exp(-2*(diff-max_diff/2)/decay))**(-1)
+            p_temp *= diff/max_diff
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
@@ -1026,8 +1024,7 @@ class set_f(ez):
         if ~np.isnan(self.water_h):
             diff = (self.build_bed(self.slope)+self.water_h - self.z)
             max_diff = np.max(diff)
-            decay = max_diff/6
-            p_temp *= (1+np.exp(-2*(diff-max_diff/2)/decay))**(-1)
+            p_temp *= diff/max_diff
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
