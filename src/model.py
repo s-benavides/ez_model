@@ -9,7 +9,7 @@ import random
 
 class ez():
     
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0, fb = 0.3,gauss=True,slope=0,water_h=np.nan):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0, fb = 0.3,gauss=True,slope=0,water_h=np.nan,zfactor=1):
         """
         Initialize the model
         Parameters for ez superclass
@@ -38,6 +38,7 @@ class ez():
         self.gauss=gauss
         self.slope=slope
         self.water_h = water_h # Water level above initial bed.
+        self.zfactor = zfactor # Scaling the slope calculation to use steeper integer slopes and thus get better resolved slopes without having very steep ones.
        
         ####################
         ## INITIAL fields ##
@@ -66,7 +67,7 @@ class ez():
         self.q8in = self.q_in / self.norm
         
         ## Build initial bed
-        self.bed_h = 500
+        self.bed_h = 2048 #500
         self.z = self.bed_h*np.ones((Ny,Nx),dtype=int) # Units of grain radii
         if slope>0:
             self.z=self.build_bed(slope)
@@ -120,7 +121,7 @@ class ez():
         else:
             z_temp = np.copy(self.z)
             
-        s=(z_temp-np.roll(np.roll(z_temp,rolly,axis=0),rollx,axis = 1))/rollx
+        s=(z_temp-np.roll(np.roll(z_temp,rolly,axis=0),rollx,axis = 1))/rollx/self.zfactor
         
         c_temp = np.sqrt(s**2+1)
 
