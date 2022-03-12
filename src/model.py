@@ -739,7 +739,7 @@ class set_q(ez):
 
     (see __init__ help for more info on parameters.)
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,q_in,rho = 1.25,initial=0.0,fb = 0.3,gauss=True,slope=0,water_h=np.nan):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,q_in,rho = 1.25,initial=0.0,fb = 0.3,gauss=True,slope=0,water_h=np.nan,zfactor=1):
         """
         Initialize the model
         Parameters for set_q subclass
@@ -755,7 +755,7 @@ class set_q(ez):
         fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
         q_in: number of entrained particles at top of the bed (flux in). Can be less than one but must be rational! q_in <= Ny!
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb = fb,gauss=gauss,slope=slope,water_h=water_h)
+        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb = fb,gauss=gauss,slope=slope,water_h=water_h,zfactor=zfactor)
         ## Input parameters to be communicated to other functions:        
         if q_in>Ny:
             print("q_in > Ny ! Setting q_in = Ny.")
@@ -929,7 +929,7 @@ class set_f(ez):
     In this model, the main input parameter is f, which is the probability that extreme events in fluid stresses entrain a grain and move it downstream.
     The entrained grains flow out of one end and, importantly, come back into the other end: this mode has periodic boundary conditions in all directions.
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0,fb=0.3,gauss=True,slope=0,water_h=np.nan):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0,fb=0.3,gauss=True,slope=0,water_h=np.nan,zfactor=1):
         """
         Initialize the model
         Parameters for set_f subclass
@@ -944,7 +944,7 @@ class set_f(ez):
         initial: initial condition -- all sites are activated with a probability equal to initial
         fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb=fb,gauss=gauss,slope=slope,water_h=water_h)
+        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb=fb,gauss=gauss,slope=slope,water_h=water_h,zfactor=zfactor)
         
         
     #########################################
