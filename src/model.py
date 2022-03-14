@@ -151,8 +151,8 @@ class ez():
         # If water_h not nan, then apply water height dependence (based on initial bed):
         if ~np.isnan(self.water_h):
             diff = (self.build_bed(self.slope)+self.water_h - self.z)
-            max_diff = np.max(diff)
-            p_temp *= diff/max_diff
+            # max_diff = np.max(diff)
+            p_temp *= diff#/max_diff
             
         # # Include fluid feedback:
         # p_temp *= (1-self.fb*self.e)        
@@ -885,8 +885,8 @@ class set_q(ez):
         # If water_h not nan, then apply water height dependence:
         if ~np.isnan(self.water_h):
             diff = (self.build_bed(self.slope)+self.water_h - self.z)
-            max_diff = np.max(diff)
-            p_temp *= diff/max_diff
+            # max_diff = np.max(diff)
+            p_temp *= diff#/max_diff
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
@@ -1024,8 +1024,8 @@ class set_f(ez):
         # If water_h not nan, then apply water height dependence:
         if ~np.isnan(self.water_h):
             diff = (self.build_bed(self.slope)+self.water_h - self.z)
-            max_diff = np.max(diff)
-            p_temp *= diff/max_diff
+            # max_diff = np.max(diff)
+            p_temp *= diff #/max_diff
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
