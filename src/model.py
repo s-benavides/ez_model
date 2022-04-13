@@ -9,36 +9,45 @@ import random
 
 class ez():
     
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0, fb = 0.3,gauss=True,slope=0,water_h=np.nan,zfactor=1):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50):
         """
-        Initialize the model
+        Initialize the model       
         Parameters for ez superclass
         ----------
-        Nx: number of gridpoints in x-direction. One gridpoint represents a grain diameter. We normalize by the total size of the domain so that dx = 1/Nx.
-        Ny: number of gridpoints in y-direction
-        c_0: the KE of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). This number should not be greater than 1/3 (otherwise the whole bed would be washed away). c_0 = u_p^2/(2*g*dx), with u_p being the dimensionless grain velocity, g is the dimensionless gravity (scales like T^-1 as dt and dx --> 0), dx and dt are the dimensionless grain diameter and hop duration (normalized by the domain size L and time it takes for a disturbance to move down the whole bed T, respectively).
-        f: probability of entraining due to fluid.
-        skipmax: (average) hop length in terms of grain radii. Hop lengths are binomially distributed with a mean of skipmax. (See dx_calc function)
-        u_p: nondimensional velocity of grains. Sets dt: dt = dx/u_p.
-        rho: sqrt((rho_s-rho_w)/rho_w) = 1.25 based on experiments. 
-        initial: initial condition -- all sites are activated with a probability equal to initial
-        fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
+        Nx: number of gridpoints in x-direction. One gridpoint represents a grain diameter. 
+        Ny: number of gridpoints in y-direction. One gridpoint represents a grain diameter. 
+        c_0: prefactor to the probability of entrainment given an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed).
+        f: probability of random entrainment entraining due to fluid.
+        skipmax: (average) hop length in units of grain diameters. Hop lengths are binomially distributed with a mean of skipmax. (See dx_calc function)
+        
+        Optional parameters:
+        initial: initial condition -- all sites are activated with a probability equal to initial. set to zero by default
+        fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep. set to 0.3 by default
+        slope: if slope>0, will build a bed with slope = -slope as an initial condition. Used mainly in the 'set_f' (periodic boundaries) mode. set to zero by default
+        water_h: if water_h =/= nan, then collision probabilities and entrainment probabilities will depend also on the 'depth' of the channel. In other words, c = c_0*depth*slope, where depth = water_h + initial z - current z. set to nan by default
+        zfactor: anisotropic scaling of the vertical units. Default value is 2000, so that one entrainment or disentrainment from the bed (equalling one grain) removes 1/zfactor from the height.
+        bed_h: sets the initial height of the bed. By default = 50 (to avoid going to zero in case some initialization channel is subtracted from the bed).
+        
+        mask: Not an input parameter, but it's a boolean array of size (Ny,Nx) set to True by default. If any location is set to False, then no  entrainment can happen at that location. This is for the purposes of setting no-flux boundary conditions in y (which are normally periodic).
+        
+        Units:
+        ----------
+         - Length units (x,y) and bed height z are in units of grain diameters (e.g., order 1-10 mm)
+         - Time step is in units of grain time-of-flight (e.g., around 0.1 s, see Liu et al. JGR:ES 124 (2019))
         """
         ## Input parameters to be communicated to other functions:        
         self.Nx = int(Nx)
         self.Ny = int(Ny)
         self.Xmesh,self.Ymesh = np.meshgrid(np.arange(self.Nx),np.arange(self.Ny)) 
-        self.u_p = u_p
         self.skipmax = skipmax
         self.c_0 = c_0
         self.f = f
-        self.rho = rho
         self.q_in=0.0 
         self.fb = fb
-        self.gauss=gauss
         self.slope=slope
         self.water_h = water_h # Water level above initial bed.
         self.zfactor = zfactor # Scaling the slope calculation to use steeper integer slopes and thus get better resolved slopes without having very steep ones.
+        self.bed_h = bed_h
        
         ####################
         ## INITIAL fields ##
@@ -53,22 +62,11 @@ class ez():
         ## Probabilities
         self.p = np.zeros((Ny,Nx))
         ## Time:
-        self.t = 0.0
         self.tstep = int(0)
         self.mask = np.ones(self.e.shape,dtype=bool)
         
-        # Other parameters
-        self.x = np.linspace(0,1,self.Nx)
-        self.dx = np.diff(self.x)[0] # In units of grain diameters!
-        self.dt = self.skipmax*self.dx / self.u_p
-        self.g =  self.u_p**2 / (2*3*self.c_0*self.dx)
-        self.Q = 0.75*np.pi**(-1)*self.rho*(self.g*self.dx)**(0.5)*self.dt
-        self.norm = self.Ny*self.dt*(3/4.)*np.pi**(-1)*self.rho
-        self.q8in = self.q_in / self.norm
-        
         ## Build initial bed
-        self.bed_h = 2048 #500
-        self.z = self.bed_h*np.ones((Ny,Nx),dtype=int) # Units of grain radii
+        self.z = self.bed_h*np.ones((Ny,Nx),dtype=float) # Units of grain diameters
         if slope>0:
             self.z=self.build_bed(slope)
         
@@ -77,7 +75,7 @@ class ez():
         self.dx_mat = self.dx_calc()
         
         ## Output keys:
-        self.okeys = ['tstep','time','bed_activity','q_mid','e_mid','e_last']
+        self.okeys = ['tstep','bed_activity','q_mid','e_mid','e_last']
 
     #########################################
     ####       Dynamics and Calcs      ######
@@ -90,14 +88,11 @@ class ez():
         """
         Calculates dx from binomial distribution with mean skipmax and variance skipmax/2. Returns dx.
         """            
-        if self.gauss:
-            # So that the variance is self.skipmax/a
-            a = 2
-            p = (a-1)/a
-            n = self.skipmax/p
-            dx=self.rng.binomial(n,p,size=self.e.shape)
-        else:
-            dx=self.rng.geometric(1/float(self.skipmax),size=self.e.shape)
+        # So that the variance is self.skipmax/a
+        a = 2
+        p = (a-1)/a
+        n = self.skipmax/p
+        dx=self.rng.binomial(n,p,size=self.e.shape)
 
         if not periodic:
             # Make the top row dx = 1, so that input flux is what we want:
@@ -121,9 +116,9 @@ class ez():
         else:
             z_temp = np.copy(self.z)
             
-        s=(z_temp-np.roll(np.roll(z_temp,rolly,axis=0),rollx,axis = 1))/rollx/self.zfactor
+        s=(z_temp-np.roll(np.roll(z_temp,rolly,axis=0),rollx,axis = 1))/rollx
         
-        c_temp = np.sqrt(s**2+1)
+        c_temp = np.abs(s)
 
         # Setting c = 0 for any slope that is positive
         c_temp[s>0] = 0.0
@@ -173,7 +168,7 @@ class ez():
         dxs = self.skipmax # Advecting with mean flow just to avoid overlaps
         xs = (xs-dxs)%self.Nx
         
-        z_temp[ys,xs] -=  1
+        z_temp[ys,xs] -=  1/self.zfactor
         
         return ep_temp,z_temp
         
@@ -194,7 +189,7 @@ class ez():
         """
         Calculates and returns the dimensionless flux profile as a function of x. Note that it is a one-dimensional array because we're summing over the y-direction and dividing by Ny.
         """
-        return np.sum(self.dx_mat*self.e,axis=0)/self.norm
+        return np.sum(self.dx_mat*self.e,axis=0)
 
     ######################
     # Update entrainment #
@@ -258,7 +253,7 @@ class ez():
         for x in np.argwhere(z_temp_s>0):
             indlist = np.where(self.e[:,x])[0] # will deposit in e locations
             ind = random.sample(indlist.tolist(),k=z_temp_s[x][0])
-            z_temp[ind,x] += 1  # deposit
+            z_temp[ind,x] += 1/self.zfactor  # deposit
             
         for x in np.argwhere(z_temp_s<0):
             eproll = np.roll(self.ep,-x[0],axis=1)
@@ -266,12 +261,12 @@ class ez():
             if len(indlist)<abs(z_temp_s[x][0]):
                 indlist= np.concatenate((indlist,random.sample(np.setdiff1d(np.arange(self.Ny),indlist).tolist(),k=abs(z_temp_s[x][0])-len(indlist))))
             ind = random.sample(indlist.tolist(),k=abs(z_temp_s[x][0]))
-            z_temp[ind,x] -= 1 # entrain
+            z_temp[ind,x] -= 1/self.zfactor # entrain
         
         # Sets any negative z to zero (although this should not happen...)
-        # if (z_temp<0).any():
-        #     print("NEGATIVE Z!")
-        #     print(np.where(z_temp<0))
+        if (z_temp<0).any():
+            print("NEGATIVE Z!")
+            print(np.where(z_temp<0))
         z_temp[z_temp<0] = 0
     
         
@@ -292,13 +287,13 @@ class ez():
 
         # The true bed is now from 1+rollx to Nx in bed_f
         m,b = np.polyfit(xs[int(self.Nx/4)+rollx:-int(self.Nx/4)],bed[int(self.Nx/4):-int(self.Nx/4)],1)
-        bed_f = np.array(np.round(m*xs+b),dtype=int)
+        bed_f = np.array(m*xs+b,dtype=float)
         
         # Calculate the pertrusion from the fit
         z_diff = self.z[:,-rollx:]-bed_f[-rollx:]
 
         # Add the extra space
-        z_t = np.hstack((np.zeros((self.Ny,rollx),dtype=int),np.copy(self.z)))
+        z_t = np.hstack((np.zeros((self.Ny,rollx),dtype=float),np.copy(self.z)))
 
         # Add the baseline extrapolated slope + the difference at each point
         z_t[:,:rollx] = bed_f[:rollx]+z_diff
@@ -312,7 +307,7 @@ class ez():
         z_temp = np.copy(self.z)
         
         for i in range(self.Ny):
-            z_temp[i,:] = slope*(np.max(self.x)-self.x)/self.dx + self.bed_h
+            z_temp[i,:] = slope*(self.Nx-np.arange(self.Nx)-1) + self.bed_h
 
         return z_temp
     
@@ -323,33 +318,32 @@ class ez():
     def export_name(self):
         c0str = str(self.c_0).replace(".", "d")
         fstr = str(self.f).replace(".", "d")
-        upstr = str(self.u_p).replace(".", "d")
-        return 'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+str(self.q_in).replace(".","d")+'_c0_'+c0str+'_f_'+fstr+'_skip_'+str(self.skipmax)+'_u_p_'+upstr
+        return 'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+str(self.q_in).replace(".","d")+'_c0_'+c0str+'_f_'+fstr+'_skip_'+str(self.skipmax)
  
     def get_state(self):
         """
-        Get current state of model: returns [tstep,t,z,ep,p,dx_mat]
+        Get current state of model: returns [tstep,z,ep,p,dx_mat]
         """
-        return [self.tstep,self.t,self.z,self.ep,self.p,self.dx_mat]
+        return [self.tstep,self.z,self.ep,self.p,self.dx_mat]
 
     def get_params(self):
         """
-        Get parameters of model: returns [Nx,Ny,c_0,f,skipmax,u_p,rho]
+        Get parameters of model: returns [Nx,Ny,c_0,f,skipmax,initial,fb,slope,water_h,zfactor,bed_h]
         """
-        return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'u_p':self.u_p,'rho':self.rho}
+        return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'initial':self.initial,'fb':self.fb,'slope':self.slope,'water_h':self.water_h,'zfactor':self.zfactor,'bed_h':self.bed_h}
     
     def get_scalars(self):
         """
-        Get scalar outputs of model: returns [tstep, time, bed_activity, q_mid,e_mid,e_last]
+        Get scalar outputs of model: returns [tstep, bed_activity, q_mid,e_mid,e_last]
         """
-        return [self.tstep,self.t,self.bed_activity(),self.q_profile_calc()[int(self.Nx/2)],np.sum(self.ep,axis=0)[int(self.Nx/2)],np.sum(self.ep,axis=0)[-1]]
+        return [self.tstep,self.bed_activity(),self.q_profile_calc()[int(self.Nx/2)],np.sum(self.ep,axis=0)[int(self.Nx/2)],np.sum(self.ep,axis=0)[-1]]
     
     def set_state(self,data):
         """
-        Set current state of model: input must be in format [tstep,t,z,ep,p,dx_mat]. To be used with 'load_data'. 
+        Set current state of model: input must be in format [tstep,z,ep,p,dx_mat]. To be used with 'load_data'. 
         No need to use set_state unless you want to manually create a dataset.
         """
-        [self.tstep,self.t,self.z,self.ep,self.p,self.dx_mat] = data
+        [self.tstep,self.z,self.ep,self.p,self.dx_mat] = data
         return
     
     def load_data(self,name,num = -1):
@@ -359,7 +353,6 @@ class ez():
         """
         with h5py.File(name,'r') as f:
             self.tstep = f['state']['tstep'][num]
-            self.t = f['state']['time'][num]
             self.z = f['state']['z'][num]
             self.ep = f['state']['ep'][num]
             self.p = f['state']['p'][num]
@@ -376,7 +369,7 @@ class ez():
         Exports odir+ self.export_name() +'_state.h5' file, 
         which contains two groups: 
             1) 'parameters' (depends on the mode)
-            2) 'state' [tstep,t,z,ep,p]
+            2) 'state' [tstep,z,ep,p]
         into directory 'odir'.
         """
         fname = odir+ self.export_name() +'_state.h5'
@@ -391,7 +384,6 @@ class ez():
                 # State of simulation
                 state = f.create_group('state')
                 state.create_dataset('tstep', data = [self.tstep],maxshape=(None,),chunks=True)
-                state.create_dataset('time', data = [self.t],maxshape=(None,),chunks=True)
                 state.create_dataset('z', data = [self.z],maxshape=(None,np.shape(self.z)[0],np.shape(self.z)[1]),chunks=True)
                 state.create_dataset('ep', data = [self.ep],maxshape=(None,np.shape(self.ep)[0],np.shape(self.ep)[1]),chunks=True)
                 state.create_dataset('p', data = [self.p],maxshape=(None,np.shape(self.p)[0],np.shape(self.p)[1]),chunks=True)
@@ -408,7 +400,6 @@ class ez():
                     # State of simulation
                     state = f.create_group('state')
                     state.create_dataset('tstep', data = [self.tstep],maxshape=(None,),chunks=True)
-                    state.create_dataset('time', data = [self.t],maxshape=(None,),chunks=True)
                     state.create_dataset('z', data = [self.z],maxshape=(None,np.shape(self.z)[0],np.shape(self.z)[1]),chunks=True)
                     state.create_dataset('ep', data = [self.ep],maxshape=(None,np.shape(self.ep)[0],np.shape(self.ep)[1]),chunks=True)
                     state.create_dataset('p', data = [self.p],maxshape=(None,np.shape(self.p)[0],np.shape(self.p)[1]),chunks=True)
@@ -418,8 +409,6 @@ class ez():
                     state = f['state']
                     state['tstep'].resize((state['tstep'].shape[0] + 1), axis = 0)
                     state['tstep'][-1:] = [self.tstep]
-                    state['time'].resize((state['time'].shape[0] + 1), axis = 0)
-                    state['time'][-1:] = [self.t]
                     state['z'].resize((state['z'].shape[0] + 1), axis = 0)
                     state['z'][-1:] = [self.z]
                     state['ep'].resize((state['ep'].shape[0] + 1), axis = 0)
@@ -500,10 +489,10 @@ class ez():
         ax2.tick_params(axis='both',bottom=False,left=False)
         #
         meanz = np.mean(self.z,axis=0)
-        ax3.plot(self.x,meanz,'-k')
+        ax3.plot(np.arange(self.Nx),meanz,'-k')
         # x = np.arange(len(meanz))
         # ax3.plot(meanz[0]-np.sqrt(1/(9.*self.c_0)-1)*x,'--r')
-        ax3.set_ylabel("Height (grain radii)")
+        ax3.set_ylabel("Height (grain diameters)")
         ax3.set_xlabel(r"$x$")
         # bbox=plt.gca().get_position()
         # offset=-.15
@@ -648,12 +637,10 @@ class ez():
         zs = [np.mean(self.z,axis=0)]
         es = [self.e]
         qs = [self.bed_activity()]
-        ts = [self.t]
         dt = 0
         for frame in tqdm.tqdm(range(t_steps)):
             self.step(bed_feedback=bed_feedback)
             qs.append(self.bed_activity())
-            ts.append(self.t)  
             dt+=1 
             if dt % dt_frame ==0:
                 dt = 0
@@ -671,7 +658,7 @@ class ez():
 
         # initialize two axes objects (one in each axes)
         im_e = ax1.imshow(es[0],vmin=0,vmax=1,cmap='binary',aspect=self.Nx/(5*self.Ny))
-        im_z, = ax2.plot(self.x,zs[-1],'-k')      
+        im_z, = ax2.plot(np.arange(self.Nx),zs[-1],'-k')      
         im_q, = ax3.plot(ts,np.zeros(len(qs)),'-k',lw=1)
 
         # set titles and labels
@@ -679,7 +666,7 @@ class ez():
         ax1.set_yticklabels([])
         ax1.tick_params(axis='both',bottom=False,left=False)
         ax1.set_title("Entrainment Field")
-        ax2.set_ylabel("Height (grain radii)")
+        ax2.set_ylabel("Height (grain diameters)")
         ax2.set_xlabel(r"$x$")
         ax2.set_xlim(0,1)
         ax2.set_ylim(np.min(zs[-1]),np.max(zs[-1]))
@@ -733,43 +720,47 @@ class ez():
     
 class set_q(ez):
     """
-    This mode is set up to replicate experiments, where the grains are dropped in on one end at a fixed rate q_in, the main input parameter of this mode, 
-    and then flow downstream. These grains then flow out and are measured, but they are not re-introduced.
+    This mode is set up to replicate experiments, where the grains are dropped in on one end at a fixed rate q_in, the main input parameter of this mode, and then flow downstream. These grains then flow out and are measured, but they are not re-introduced.
     Entrainment happens due to collisions and due to random fluid entrainments.
 
     (see __init__ help for more info on parameters.)
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,q_in,rho = 1.25,initial=0.0,fb = 0.3,gauss=True,slope=0,water_h=np.nan,zfactor=1):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,q_in,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h=50):
         """
         Initialize the model
         Parameters for set_q subclass
         ----------
-        Nx: number of gridpoints in x-direction. One gridpoint represents a grain diameter. We normalize by the total size of the domain so that dx = 1/Nx.
-        Ny: number of gridpoints in y-direction
-        c_0: the KE of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). This number should not be greater than 1/3 (otherwise the whole bed would be washed away). c_0 = u_p^2/(2*g*dx), with u_p being the dimensionless grain velocity, g is the dimensionless gravity (scales like T^-1 as dt and dx --> 0), dx and dt are the dimensionless grain diameter and hop duration (normalized by the domain size L and time it takes for a disturbance to move down the whole bed T, respectively).
-        f: probability of entraining due to fluid.
-        skipmax: (average) hop length in terms of grain radii. Hop lengths are binomially distributed with a mean of skipmax. (See dx_calc function)
-        u_p: nondimensional velocity of grains. Sets dt: dt = dx/u_p.
-        rho: sqrt((rho_s-rho_w)/rho_w) = 1.25 based on experiments. 
-        initial: initial condition -- all sites are activated with a probability equal to initial
-        fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
+        Nx: number of gridpoints in x-direction. One gridpoint represents a grain diameter. 
+        Ny: number of gridpoints in y-direction. One gridpoint represents a grain diameter. 
+        c_0: prefactor to the probability of entrainment given an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed).
+        f: probability of random entrainment entraining due to fluid.
+        skipmax: (average) hop length in units of grain diameters. Hop lengths are binomially distributed with a mean of skipmax. (See dx_calc function)
         q_in: number of entrained particles at top of the bed (flux in). Can be less than one but must be rational! q_in <= Ny!
+        
+        Optional parameters:
+        initial: initial condition -- all sites are activated with a probability equal to initial. set to zero by default
+        fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep. set to 0.3 by default
+        slope: if slope>0, will build a bed with slope = -slope as an initial condition. Used mainly in the 'set_f' (periodic boundaries) mode. set to zero by default
+        water_h: if water_h =/= nan, then collision probabilities and entrainment probabilities will depend also on the 'depth' of the channel. In other words, c = c_0*depth*slope, where depth = water_h + initial z - current z. set to nan by default
+        zfactor: anisotropic scaling of the vertical units. Default value is 2000, so that one entrainment or disentrainment from the bed (equalling one grain) removes 1/zfactor from the height.
+        bed_h: sets the initial height of the bed. By default = 2048 (to avoid going to zero in case some initialization channel is subtracted from the bed).
+        
+        mask: Not an input parameter, but it's a boolean array of size (Ny,Nx) set to True by default. If any location is set to False, then no  entrainment can happen at that location. This is for the purposes of setting no-flux boundary conditions in y (which are normally periodic).
+        
+        Units:
+        ----------
+         - Length units (x,y) and bed height z are in units of grain diameters (e.g., order 1-10 mm)
+         - Time step is in units of grain time-of-flight (e.g., around 0.1 s, see Liu et al. JGR:ES 124 (2019))
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb = fb,gauss=gauss,slope=slope,water_h=water_h,zfactor=zfactor)
+        super().__init__(Nx,Ny,c_0,f,skipmax,initial=initial,fb = fb,slope=slope,water_h=water_h,zfactor=zfactor,bed_h=bed_h)
         ## Input parameters to be communicated to other functions:        
         if q_in>Ny:
             print("q_in > Ny ! Setting q_in = Ny.")
             self.q_in = self.Ny
         else:
             self.q_in = q_in
-
-        self.q8in = self.q_in / self.norm
         
-        self.scrit = -np.sqrt((1/(3*self.c_0*(1-self.fb*(self.q_in/self.Ny))))**2 - 1)
-        
-        if self.c_0>(1/3.):
-            print("WARNING: c_0 cannot be greater than 1/3. Otherwise a flat slope will transport. Setting c_0 = 1/3.")
-            self.c_0 = 1/3.
+        self.scrit = 1/3/self.c_0
         
         ####################
         ## INITIAL fields ##
@@ -779,7 +770,7 @@ class set_q(ez):
         self.q_tot_out = int(0)
 
         ## Output keys:
-        self.okeys = ['tstep','time','bed_activity','q_mid','e_mid','e_last','q_out']
+        self.okeys = ['tstep','bed_activity','q_mid','e_mid','e_last','q_out']
 
     #########################################
     ####       Dynamics and Calcs      ######
@@ -793,7 +784,7 @@ class set_q(ez):
         Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [p,e,z,q_out].
 
         Options:
-        bal (= False by default): returns sum of active grains, grains in the bed, and grains that left the domain to check grain number conservation.
+        bal (= False by default): returns sum of active grains, grains in the bed (times zfactor), and grains that left the domain to check grain number conservation.
         bed_feedback ( = True by default): if False, then the bed doesn't update and there is no feedback with the bed.
         """
         
@@ -820,7 +811,7 @@ class set_q(ez):
             print("ERROR: check q_in value.")
             
         if bal:        
-            temp = np.sum(self.e)+np.sum(self.z)+self.q_tot_out
+            temp = np.sum(self.e)+np.int(np.round(np.sum(self.z)*self.zfactor))+self.q_tot_out
         
         ## Recalculates dx randomly
         self.dx_mat = self.dx_calc()
@@ -846,7 +837,6 @@ class set_q(ez):
         
         ## Add to time:
         self.tstep += 1
-        self.t     += self.dt
 
        
         if bal:
@@ -913,15 +903,15 @@ class set_q(ez):
 
     def get_params(self):
         """
-        Get parameters of model: returns [Nx,Ny,c_0,f,skipmax,u_p,rho,q_in]
+        Get parameters of model: returns [Nx,Ny,c_0,f,skipmax,initial,fb,slope,water_h,zfactor,bed_h,q_in]
         """
-        return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'u_p':self.u_p,'rho':self.rho, 'q_in':self.q_in}
-
+        return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'initial':self.initial,'fb':self.fb,'slope':self.slope,'water_h':self.water_h,'zfactor':self.zfactor,'bed_h':self.bed_h,'q_in':self.q_in}
+    
     def get_scalars(self):
         """
-        Get scalar outputs of model: returns [tstep, time, bed_activity,q_mid,e_mid,e_last,q_out]
+        Get scalar outputs of model: returns [tstep, bed_activity,q_mid,e_mid,e_last,q_out]
         """
-        return [self.tstep,self.t,self.bed_activity(),self.q_profile_calc()[int(self.Nx/2)],np.sum(self.e,axis=0)[int(self.Nx/2)],np.sum(self.e,axis=0)[-1],self.q_out_calc()]
+        return [self.tstep,self.bed_activity(),self.q_profile_calc()[int(self.Nx/2)],np.sum(self.e,axis=0)[int(self.Nx/2)],np.sum(self.e,axis=0)[-1],self.q_out_calc()]
 
 class set_f(ez):
     """
@@ -929,22 +919,33 @@ class set_f(ez):
     In this model, the main input parameter is f, which is the probability that extreme events in fluid stresses entrain a grain and move it downstream.
     The entrained grains flow out of one end and, importantly, come back into the other end: this mode has periodic boundary conditions in all directions.
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,u_p,rho = 1.25,initial=0.0,fb=0.3,gauss=True,slope=0,water_h=np.nan,zfactor=1):
+    def __init__(self,Nx,Ny,c_0,f,skipmax,initial=0.0,fb=0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h=50):
         """
         Initialize the model
         Parameters for set_f subclass
         ----------
-        Nx: number of gridpoints in x-direction. One gridpoint represents a hop-length distance. We normalize by the total size of the domain so that dx = 1/Nx.
-        Ny: number of gridpoints in y-direction
-        c_0: the KE of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). This number should not be greater than 1/3 (otherwise the whole bed would be washed away). c_0 = u_p^2 skipmax/(2*g*dx), with u_p being the dimensionless grain velocity, 'skipmax' is the hop length in number of grain diameters, g is the dimensionless gravity (scales like T^-1 as dt and dx --> 0), dx and dt are the dimensionless hop length and hop duration (normalized by the domain size L and time it takes for a disturbance to move down the whole bed T, respectively).
-        f: probability of entraining due to fluid.
-        skipmax: hop length in terms of grain radii
-        u_p: nondimensional velocity of grains. Sets dt: dt = dx/u_p.
-        rho: sqrt((rho_s-rho_w)/rho_w) = 1.25 based on experiments. 
-        initial: initial condition -- all sites are activated with a probability equal to initial
-        fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep.
+        Nx: number of gridpoints in x-direction. One gridpoint represents a grain diameter. 
+        Ny: number of gridpoints in y-direction. One gridpoint represents a grain diameter. 
+        c_0: prefactor to the probability of entrainment given an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed).
+        f: probability of random entrainment entraining due to fluid.
+        skipmax: (average) hop length in units of grain diameters. Hop lengths are binomially distributed with a mean of skipmax. (See dx_calc function)
+
+        Optional parameters:
+        initial: initial condition -- all sites are activated with a probability equal to initial. set to zero by default
+        fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep. set to 0.3 by default
+        slope: if slope>0, will build a bed with slope = -slope as an initial condition. Used mainly in the 'set_f' (periodic boundaries) mode. set to zero by default
+        water_h: if water_h =/= nan, then collision probabilities and entrainment probabilities will depend also on the 'depth' of the channel. In other words, c = c_0*depth*slope, where depth = water_h + initial z - current z. set to nan by default
+        zfactor: anisotropic scaling of the vertical units. Default value is 2000, so that one entrainment or disentrainment from the bed (equalling one grain) removes 1/zfactor from the height.
+        bed_h: sets the initial height of the bed. By default = 2048 (to avoid going to zero in case some initialization channel is subtracted from the bed).
+        
+        mask: Not an input parameter, but it's a boolean array of size (Ny,Nx) set to True by default. If any location is set to False, then no  entrainment can happen at that location. This is for the purposes of setting no-flux boundary conditions in y (which are normally periodic).
+        
+        Units:
+        ----------
+         - Length units (x,y) and bed height z are in units of grain diameters (e.g., order 1-10 mm)
+         - Time step is in units of grain time-of-flight (e.g., around 0.1 s, see Liu et al. JGR:ES 124 (2019))
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,u_p,rho = rho,initial=initial,fb=fb,gauss=gauss,slope=slope,water_h=water_h,zfactor=zfactor)
+        super().__init__(Nx,Ny,c_0,f,skipmax,initial=initial,fb=fb,slope=slope,water_h=water_h,zfactor=zfactor,bed_h=bed_h)
         
         
     #########################################
@@ -959,7 +960,7 @@ class set_f(ez):
         Take a time-step. Dynamical inputs needed: z, e. Returns nothing, just updates [p,e,z].
 
         Options:
-        bal (= False by default): returns sum of active grains and grains in the bed, to check grain number conservation.
+        bal (= False by default): returns sum of active grains and grains in the bed (times zfactor), to check grain number conservation.
         bed_feedback ( = True by default): if False, then the bed doesn't update and there is no feedback with the bed.
         """
 
@@ -967,7 +968,7 @@ class set_f(ez):
         self.e = np.copy(self.ep)    
         
         if bal:        
-            temp = np.sum(self.e)+np.sum(self.z)
+            temp = np.sum(self.e)+np.int(np.round(np.sum(self.z)*self.zfactor))
         
         ## Recalculates dx randomly
         self.dx_mat = self.dx_calc(periodic=True) 
@@ -991,7 +992,6 @@ class set_f(ez):
                 
         ## Add to time:
         self.tstep += 1
-        self.t     += self.dt 
         
         if bal:
             return temp
