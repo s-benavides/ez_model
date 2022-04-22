@@ -9,15 +9,16 @@ import random
 
 class ez():
     
-    def __init__(self,Nx,Ny,c_0,f,skipmax,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50):
+    def __init__(self,Nx,Ny,c_0,f,u_0,skipmax,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50,mu_c=1.0,g_0=3.3333):
         """
         Initialize the model       
         Parameters for ez superclass
         ----------
         Nx: number of gridpoints in x-direction. One gridpoint represents a grain diameter. 
         Ny: number of gridpoints in y-direction. One gridpoint represents a grain diameter. 
-        c_0: prefactor to the probability of entrainment given an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed).
+        c_0: prefactor to the probability of entrainment given an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). Typical values to use: c_0 * depth ~ 300 if you want your equilibrium slope to be roughly 1e-3.
         f: probability of random entrainment entraining due to fluid.
+        u_0: prefactor to the shear-stress component of the friction coefficient (see mu_c below). Typical values to use: u_0 * depth ~ 50 or smaller, to avoid runaway effects.
         skipmax: (average) hop length in units of grain diameters. Hop lengths are binomially distributed with a mean of skipmax. (See dx_calc function)
         
         Optional parameters:
@@ -27,6 +28,8 @@ class ez():
         water_h: if water_h =/= nan, then collision probabilities and entrainment probabilities will depend also on the 'depth' of the channel. In other words, c = c_0*depth*slope, where depth = water_h + initial z - current z. set to nan by default
         zfactor: anisotropic scaling of the vertical units. Default value is 2000, so that one entrainment or disentrainment from the bed (equalling one grain) removes 1/zfactor from the height.
         bed_h: sets the initial height of the bed. By default = 50 (to avoid going to zero in case some initialization channel is subtracted from the bed).
+        mu_c: critical friction, before avalanching happens and causes entrainment. mu = ( (u_0*slope_x*depth)**2 + (g_0*slope_y)**2). Set to 1 by default (following Popovic et al. PNAS 2021).
+        g_0 : prefactor to the gravitational contribution to the friction coefficient. Set to 3.333 by default so that the critical avalanche slope is the same as that of immersed sand (0.3).
         
         mask: Not an input parameter, but it's a boolean array of size (Ny,Nx) set to True by default. If any location is set to False, then no  entrainment can happen at that location. This is for the purposes of setting no-flux boundary conditions in y (which are normally periodic).
         
@@ -42,12 +45,15 @@ class ez():
         self.skipmax = skipmax
         self.c_0 = c_0
         self.f = f
+        self.u_0 = u_0
         self.q_in=0.0 
         self.fb = fb
         self.slope=slope
         self.water_h = water_h # Water level above initial bed.
         self.zfactor = zfactor # Scaling the slope calculation to use steeper integer slopes and thus get better resolved slopes without having very steep ones.
         self.bed_h = bed_h
+        self.mu_c = mu_c
+        self.g_0 = g_0
        
         ####################
         ## INITIAL fields ##
@@ -145,9 +151,11 @@ class ez():
         
         # If water_h not nan, then apply water height dependence (based on initial bed):
         if ~np.isnan(self.water_h):
-            diff = (self.build_bed(self.slope)+self.water_h - self.z)
-            # max_diff = np.max(diff)
-            p_temp *= diff#/max_diff
+            depth = (self.build_bed(self.slope)+self.water_h - self.z)
+            depth[depth<0]=0.0
+        else:
+            depth = 1.0
+        p_temp *= depth
             
         # # Include fluid feedback:
         # p_temp *= (1-self.fb*self.e)        
@@ -171,7 +179,67 @@ class ez():
         z_temp[ys,xs] -=  1/self.zfactor
         
         return ep_temp,z_temp
+    
+    ###############
+    # Avalanching #
+    ###############
+    def a_entrain(self):
+        """
+        Entrains sites due to avalanching. Uses: mu_c, u_0, g_0, self.z, output: updated versions of self.ep, self.z.
+        """    
+        # If water_h not nan, then apply water height dependence:
+        if ~np.isnan(self.water_h):
+            depth = (self.build_bed(self.slope)+self.water_h - self.z)
+            depth[depth<0]=0.0
+        else:
+            depth = 1.0
         
+        # Finally, apply avalanche condition
+        slope_y = np.gradient(self.z,axis=0)
+        slope_x = np.gradient(self.z,axis=1)
+        mu = ((self.u_0*slope_x*depth)**2 + (self.g_0*slope_y)**2)**(0.5)
+        
+        # Copy of arrays of interest
+        ep_temp = np.copy(self.ep)
+        z_temp = np.copy(self.z)
+        
+        # Entrain grains with the smallest depths
+        depths = np.unique(list(sorted((depth*(mu>self.mu_c)*self.mask).flatten())))
+        depths = depths[depths>0]
+        if (len(depths)>0):
+            inds_max = 0
+            for d in depths:
+                inds_max += len(np.argwhere(depth==d))
+            num = min([10,inds_max])
+            ii = 0 
+            count = 0
+            while count<num:
+                inds = np.argwhere(depth==depths[ii])
+                choose = np.min([len(inds),(num-count)])
+                inds_rand = self.rng.choice(inds,choose,replace=False)
+                ys,xs = inds_rand.T
+                ep_temp[ys,xs]=True
+                ii+=1
+                count+=choose
+        
+        # # Randomly entrain one grain per x grid point in an avalanching region
+        # xs = np.where(p_temp==1.0)[1]
+        # for xt in xs:
+        #     indlist = np.where(p_temp[:,xt]==1.0)[0]
+        #     indn = self.rng.choice(len(indlist),1,replace=False)
+        #     ind = indlist[indn]
+        #     ep_temp[ind,xt]=True
+
+        # Subtract from places upstream of where we found them entrained.
+        ys,xs = np.where(ep_temp ^ self.ep)
+#         dxs = self.dx_mat[ys,xs] 
+        # dxs = self.skipmax # Advecting with mean flow just to avoid overlaps
+        # xs = (xs-dxs)%self.Nx
+        
+        z_temp[ys,xs] -=  1/self.zfactor
+        
+        return ep_temp,z_temp   
+    
     ##################################
     # Calculates bed activity (flux) #
     ##################################
@@ -328,9 +396,9 @@ class ez():
 
     def get_params(self):
         """
-        Get parameters of model: returns [Nx,Ny,c_0,f,skipmax,initial,fb,slope,water_h,zfactor,bed_h]
+        Get parameters of model: returns [Nx,Ny,c_0,f,u_0,skipmax,initial,fb,slope,water_h,zfactor,bed_h,mu_c,g_0]
         """
-        return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'initial':self.initial,'fb':self.fb,'slope':self.slope,'water_h':self.water_h,'zfactor':self.zfactor,'bed_h':self.bed_h}
+        return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'u_0':self.u_0,'skipmax':self.skipmax,'initial':self.initial,'fb':self.fb,'slope':self.slope,'water_h':self.water_h,'zfactor':self.zfactor,'bed_h':self.bed_h,'mu_c':self.mu_c,'g_0':self.g_0}
     
     def get_scalars(self):
         """
@@ -725,17 +793,17 @@ class set_q(ez):
 
     (see __init__ help for more info on parameters.)
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,q_in,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h=50):
+    def __init__(self,Nx,Ny,c_0,f,u_0,skipmax,q_in,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50,mu_c=1.0,g_0=3.3333):
         """
         Initialize the model
         Parameters for set_q subclass
         ----------
         Nx: number of gridpoints in x-direction. One gridpoint represents a grain diameter. 
         Ny: number of gridpoints in y-direction. One gridpoint represents a grain diameter. 
-        c_0: prefactor to the probability of entrainment given an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed).
+        c_0: prefactor to the probability of entrainment given an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). Typical values to use: c_0 * depth ~ 300 if you want your equilibrium slope to be roughly 1e-3.
         f: probability of random entrainment entraining due to fluid.
+        u_0: prefactor to the shear-stress component of the friction coefficient (see mu_c below). Typical values to use: u_0 * depth ~ 50 or smaller, to avoid runaway effects.
         skipmax: (average) hop length in units of grain diameters. Hop lengths are binomially distributed with a mean of skipmax. (See dx_calc function)
-        q_in: number of entrained particles at top of the bed (flux in). Can be less than one but must be rational! q_in <= Ny!
         
         Optional parameters:
         initial: initial condition -- all sites are activated with a probability equal to initial. set to zero by default
@@ -743,7 +811,9 @@ class set_q(ez):
         slope: if slope>0, will build a bed with slope = -slope as an initial condition. Used mainly in the 'set_f' (periodic boundaries) mode. set to zero by default
         water_h: if water_h =/= nan, then collision probabilities and entrainment probabilities will depend also on the 'depth' of the channel. In other words, c = c_0*depth*slope, where depth = water_h + initial z - current z. set to nan by default
         zfactor: anisotropic scaling of the vertical units. Default value is 2000, so that one entrainment or disentrainment from the bed (equalling one grain) removes 1/zfactor from the height.
-        bed_h: sets the initial height of the bed. By default = 2048 (to avoid going to zero in case some initialization channel is subtracted from the bed).
+        bed_h: sets the initial height of the bed. By default = 50 (to avoid going to zero in case some initialization channel is subtracted from the bed).
+        mu_c: critical friction, before avalanching happens and causes entrainment. mu = ( (u_0*slope_x*depth)**2 + (g_0*slope_y)**2). Set to 1 by default (following Popovic et al. PNAS 2021).
+        g_0 : prefactor to the gravitational contribution to the friction coefficient. Set to 3.333 by default so that the critical avalanche slope is the same as that of immersed sand (0.3).
         
         mask: Not an input parameter, but it's a boolean array of size (Ny,Nx) set to True by default. If any location is set to False, then no  entrainment can happen at that location. This is for the purposes of setting no-flux boundary conditions in y (which are normally periodic).
         
@@ -752,7 +822,7 @@ class set_q(ez):
          - Length units (x,y) and bed height z are in units of grain diameters (e.g., order 1-10 mm)
          - Time step is in units of grain time-of-flight (e.g., around 0.1 s, see Liu et al. JGR:ES 124 (2019))
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,initial=initial,fb = fb,slope=slope,water_h=water_h,zfactor=zfactor,bed_h=bed_h)
+        super().__init__(Nx,Ny,c_0,f,u_0,skipmax,initial=initial, fb = fb,slope=slope,water_h=water_h,zfactor=zfactor,bed_h = bed_h,mu_c=mu_c,g_0=g_0)
         ## Input parameters to be communicated to other functions:        
         if q_in>Ny:
             print("q_in > Ny ! Setting q_in = Ny.")
@@ -835,9 +905,11 @@ class set_q(ez):
             ## Random entrainment by fluid:
             self.ep,self.z = self.f_entrain()
         
+        ## Avalanches:
+        self.ep,self.z = self.a_entrain()
+        
         ## Add to time:
         self.tstep += 1
-
        
         if bal:
             return temp
@@ -869,17 +941,19 @@ class set_q(ez):
         # Include fluid feedback:
         p_temp = p_temp*(1-self.fb*self.e)*self.c_0
         
-        # Apply mask:
-        p_temp *= self.mask
-        
         # If water_h not nan, then apply water height dependence:
         if ~np.isnan(self.water_h):
-            diff = (self.build_bed(self.slope)+self.water_h - self.z)
-            # max_diff = np.max(diff)
-            p_temp *= diff#/max_diff
+            depth = (self.build_bed(self.slope)+self.water_h - self.z)
+            depth[depth<0]=0.0
+        else:
+            depth = 1.0
+        p_temp *= depth
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
+        
+        # Apply mask:
+        p_temp *= self.mask
         
         # Make sure upstream boundary conditions are met
         p_temp[:,0]=0.0
@@ -903,9 +977,9 @@ class set_q(ez):
 
     def get_params(self):
         """
-        Get parameters of model: returns [Nx,Ny,c_0,f,skipmax,initial,fb,slope,water_h,zfactor,bed_h,q_in]
+        Get parameters of model: returns [Nx,Ny,c_0,f,u_0,skipmax,initial,fb,slope,water_h,zfactor,bed_h,mu_c,g_0,q_in]
         """
-        return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'skipmax':self.skipmax,'initial':self.initial,'fb':self.fb,'slope':self.slope,'water_h':self.water_h,'zfactor':self.zfactor,'bed_h':self.bed_h,'q_in':self.q_in}
+        return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'u_0':self.u_0,'skipmax':self.skipmax,'initial':self.initial,'fb':self.fb,'slope':self.slope,'water_h':self.water_h,'zfactor':self.zfactor,'bed_h':self.bed_h,'mu_c':self.mu_c,'g_0':self.g_0,'q_in':self.q_in}
     
     def get_scalars(self):
         """
@@ -919,24 +993,27 @@ class set_f(ez):
     In this model, the main input parameter is f, which is the probability that extreme events in fluid stresses entrain a grain and move it downstream.
     The entrained grains flow out of one end and, importantly, come back into the other end: this mode has periodic boundary conditions in all directions.
     """
-    def __init__(self,Nx,Ny,c_0,f,skipmax,initial=0.0,fb=0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h=50):
+    def __init__(self,Nx,Ny,c_0,f,u_0,skipmax,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50,mu_c=1.0,g_0=3.3333):
         """
         Initialize the model
         Parameters for set_f subclass
         ----------
         Nx: number of gridpoints in x-direction. One gridpoint represents a grain diameter. 
         Ny: number of gridpoints in y-direction. One gridpoint represents a grain diameter. 
-        c_0: prefactor to the probability of entrainment given an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed).
+        c_0: prefactor to the probability of entrainment given an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). Typical values to use: c_0 * depth ~ 300 if you want your equilibrium slope to be roughly 1e-3.
         f: probability of random entrainment entraining due to fluid.
+        u_0: prefactor to the shear-stress component of the friction coefficient (see mu_c below). Typical values to use: u_0 * depth ~ 50 or smaller, to avoid runaway effects.
         skipmax: (average) hop length in units of grain diameters. Hop lengths are binomially distributed with a mean of skipmax. (See dx_calc function)
-
+        
         Optional parameters:
         initial: initial condition -- all sites are activated with a probability equal to initial. set to zero by default
         fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep. set to 0.3 by default
         slope: if slope>0, will build a bed with slope = -slope as an initial condition. Used mainly in the 'set_f' (periodic boundaries) mode. set to zero by default
         water_h: if water_h =/= nan, then collision probabilities and entrainment probabilities will depend also on the 'depth' of the channel. In other words, c = c_0*depth*slope, where depth = water_h + initial z - current z. set to nan by default
         zfactor: anisotropic scaling of the vertical units. Default value is 2000, so that one entrainment or disentrainment from the bed (equalling one grain) removes 1/zfactor from the height.
-        bed_h: sets the initial height of the bed. By default = 2048 (to avoid going to zero in case some initialization channel is subtracted from the bed).
+        bed_h: sets the initial height of the bed. By default = 50 (to avoid going to zero in case some initialization channel is subtracted from the bed).
+        mu_c: critical friction, before avalanching happens and causes entrainment. mu = ( (u_0*slope_x*depth)**2 + (g_0*slope_y)**2). Set to 1 by default (following Popovic et al. PNAS 2021).
+        g_0 : prefactor to the gravitational contribution to the friction coefficient. Set to 3.333 by default so that the critical avalanche slope is the same as that of immersed sand (0.3).
         
         mask: Not an input parameter, but it's a boolean array of size (Ny,Nx) set to True by default. If any location is set to False, then no  entrainment can happen at that location. This is for the purposes of setting no-flux boundary conditions in y (which are normally periodic).
         
@@ -945,7 +1022,7 @@ class set_f(ez):
          - Length units (x,y) and bed height z are in units of grain diameters (e.g., order 1-10 mm)
          - Time step is in units of grain time-of-flight (e.g., around 0.1 s, see Liu et al. JGR:ES 124 (2019))
         """
-        super().__init__(Nx,Ny,c_0,f,skipmax,initial=initial,fb=fb,slope=slope,water_h=water_h,zfactor=zfactor,bed_h=bed_h)
+        super().__init__(Nx,Ny,c_0,f,u_0,skipmax,initial=initial, fb = fb,slope=slope,water_h=water_h,zfactor=zfactor,bed_h = bed_h,mu_c=mu_c,g_0=g_0)
         
         
     #########################################
@@ -989,6 +1066,9 @@ class set_f(ez):
                 self.ep,self.z = self.f_entrain()
             else:
                 self.ep, _ = self.f_entrain()
+        
+        ## Avalanches:
+        self.ep,self.z = self.a_entrain()
                 
         ## Add to time:
         self.tstep += 1
@@ -1018,16 +1098,18 @@ class set_f(ez):
         # Include fluid feedback:
         p_temp = p_temp*(1-self.fb*self.e)*self.c_0
         
-        # Apply mask:
-        p_temp *= self.mask
-        
         # If water_h not nan, then apply water height dependence:
         if ~np.isnan(self.water_h):
-            diff = (self.build_bed(self.slope)+self.water_h - self.z)
-            # max_diff = np.max(diff)
-            p_temp *= diff #/max_diff
+            depth = (self.build_bed(self.slope)+self.water_h - self.z)
+            depth[depth<0]=0.0
+        else:
+            depth = 1.0
+        p_temp *= depth
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
+        
+        # Apply mask:
+        p_temp *= self.mask
                 
         return p_temp
