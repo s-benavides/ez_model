@@ -9,7 +9,7 @@ import random
 
 class ez():
     
-    def __init__(self,Nx,Ny,c_0,f,u_0,skipmax,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50,mu_c=1.0,g_0=3.3333):
+    def __init__(self,Nx,Ny,c_0,f,u_0,skipmax,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50,mu_c=1.0,g_0=3.3333,mask_index=None):
         """
         Initialize the model       
         Parameters for ez superclass
@@ -32,6 +32,7 @@ class ez():
         g_0 : prefactor to the gravitational contribution to the friction coefficient. Set to 3.333 by default so that the critical avalanche slope is the same as that of immersed sand (0.3).
         
         mask: Not an input parameter, but it's a boolean array of size (Ny,Nx) set to True by default. If any location is set to False, then no  entrainment can happen at that location. This is for the purposes of setting no-flux boundary conditions in y (which are normally periodic).
+        mask_index: (integer, = None by default) sets the number of rows (y-values) for which to set mask to False, thereby making the periodic boundaries no longer periodic and more like wall-like boundaries.
         
         Units:
         ----------
@@ -54,6 +55,7 @@ class ez():
         self.bed_h = bed_h
         self.mu_c = mu_c
         self.g_0 = g_0
+        self.mask_index=mask_index
        
         ####################
         ## INITIAL fields ##
@@ -70,6 +72,9 @@ class ez():
         ## Time:
         self.tstep = int(0)
         self.mask = np.ones(self.e.shape,dtype=bool)
+        if self.mask_index!=None:
+            self.mask[:self.mask_index,:] = False
+            self.mask[-self.mask_index:,:] = False
         
         ## Build initial bed
         self.z = self.bed_h*np.ones((Ny,Nx),dtype=float) # Units of grain diameters
@@ -187,24 +192,25 @@ class ez():
         """
         Entrains sites due to avalanching. Uses: mu_c, u_0, g_0, self.z, output: updated versions of self.ep, self.z.
         """    
+        # Copy of arrays of interest, with potential masking
+        ep_temp = np.copy(self.ep[self.mask_index:-self.mask_index,:])
+        z_temp = np.copy(self.z[self.mask_index:-self.mask_index,:])
+        
         # If water_h not nan, then apply water height dependence:
         if ~np.isnan(self.water_h):
-            depth = (self.build_bed(self.slope)+self.water_h - self.z)
+            depth = (self.build_bed(self.slope)[self.mask_index:-self.mask_index,:]+self.water_h - z_temp)
             depth[depth<0]=0.0
         else:
             depth = 1.0
         
         # Finally, apply avalanche condition
-        slope_y = np.gradient(self.z,axis=0)
-        slope_x = np.gradient(self.z,axis=1)
+        slope_y = np.gradient(z_temp,axis=0)
+        slope_x = np.gradient(z_temp,axis=1)
         mu = ((self.u_0*slope_x*depth)**2 + (self.g_0*slope_y)**2)**(0.5)
         
-        # Copy of arrays of interest
-        ep_temp = np.copy(self.ep)
-        z_temp = np.copy(self.z)
-        
+
         # Entrain grains with the smallest depths
-        depths = np.unique(list(sorted((depth*(mu>self.mu_c)*self.mask).flatten())))
+        depths = np.unique(list(sorted((depth*(mu>self.mu_c)).flatten())))
         depths = depths[depths>0]
         if (len(depths)>0):
             inds_max = 0
@@ -221,24 +227,20 @@ class ez():
                 ep_temp[ys,xs]=True
                 ii+=1
                 count+=choose
-        
-        # # Randomly entrain one grain per x grid point in an avalanching region
-        # xs = np.where(p_temp==1.0)[1]
-        # for xt in xs:
-        #     indlist = np.where(p_temp[:,xt]==1.0)[0]
-        #     indn = self.rng.choice(len(indlist),1,replace=False)
-        #     ind = indlist[indn]
-        #     ep_temp[ind,xt]=True
 
         # Subtract from places upstream of where we found them entrained.
-        ys,xs = np.where(ep_temp ^ self.ep)
-#         dxs = self.dx_mat[ys,xs] 
-        # dxs = self.skipmax # Advecting with mean flow just to avoid overlaps
-        # xs = (xs-dxs)%self.Nx
-        
+        ys,xs = np.where(ep_temp ^ self.ep[self.mask_index:-self.mask_index,:])
+
         z_temp[ys,xs] -=  1/self.zfactor
+
+        # Fill in and update full array
+        ep_out = np.copy(self.ep)
+        z_out = np.copy(self.z)
         
-        return ep_temp,z_temp   
+        ep_out[self.mask_index:-self.mask_index,:] = ep_temp
+        z_out[self.mask_index:-self.mask_index,:] = z_temp
+        
+        return ep_out,z_out
     
     ##################################
     # Calculates bed activity (flux) #
@@ -793,7 +795,7 @@ class set_q(ez):
 
     (see __init__ help for more info on parameters.)
     """
-    def __init__(self,Nx,Ny,c_0,f,u_0,skipmax,q_in,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50,mu_c=1.0,g_0=3.3333):
+    def __init__(self,Nx,Ny,c_0,f,u_0,skipmax,q_in,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50,mu_c=1.0,g_0=3.3333,mask_index=None):
         """
         Initialize the model
         Parameters for set_q subclass
@@ -816,13 +818,14 @@ class set_q(ez):
         g_0 : prefactor to the gravitational contribution to the friction coefficient. Set to 3.333 by default so that the critical avalanche slope is the same as that of immersed sand (0.3).
         
         mask: Not an input parameter, but it's a boolean array of size (Ny,Nx) set to True by default. If any location is set to False, then no  entrainment can happen at that location. This is for the purposes of setting no-flux boundary conditions in y (which are normally periodic).
+        mask_index: (integer, = None by default) sets the number of rows (y-values) for which to set mask to False, thereby making the periodic boundaries no longer periodic and more like wall-like boundaries.
         
         Units:
         ----------
          - Length units (x,y) and bed height z are in units of grain diameters (e.g., order 1-10 mm)
          - Time step is in units of grain time-of-flight (e.g., around 0.1 s, see Liu et al. JGR:ES 124 (2019))
         """
-        super().__init__(Nx,Ny,c_0,f,u_0,skipmax,initial=initial, fb = fb,slope=slope,water_h=water_h,zfactor=zfactor,bed_h = bed_h,mu_c=mu_c,g_0=g_0)
+        super().__init__(Nx,Ny,c_0,f,u_0,skipmax,initial=initial, fb = fb,slope=slope,water_h=water_h,zfactor=zfactor,bed_h = bed_h,mu_c=mu_c,g_0=g_0,mask_index=mask_index)
         ## Input parameters to be communicated to other functions:        
         if q_in>Ny:
             print("q_in > Ny ! Setting q_in = Ny.")
@@ -993,7 +996,7 @@ class set_f(ez):
     In this model, the main input parameter is f, which is the probability that extreme events in fluid stresses entrain a grain and move it downstream.
     The entrained grains flow out of one end and, importantly, come back into the other end: this mode has periodic boundary conditions in all directions.
     """
-    def __init__(self,Nx,Ny,c_0,f,u_0,skipmax,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50,mu_c=1.0,g_0=3.3333):
+    def __init__(self,Nx,Ny,c_0,f,u_0,skipmax,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50,mu_c=1.0,g_0=3.3333,mask_index=None):
         """
         Initialize the model
         Parameters for set_f subclass
@@ -1016,13 +1019,14 @@ class set_f(ez):
         g_0 : prefactor to the gravitational contribution to the friction coefficient. Set to 3.333 by default so that the critical avalanche slope is the same as that of immersed sand (0.3).
         
         mask: Not an input parameter, but it's a boolean array of size (Ny,Nx) set to True by default. If any location is set to False, then no  entrainment can happen at that location. This is for the purposes of setting no-flux boundary conditions in y (which are normally periodic).
+        mask_index: (integer, = None by default) sets the number of rows (y-values) for which to set mask to False, thereby making the periodic boundaries no longer periodic and more like wall-like boundaries.
         
         Units:
         ----------
          - Length units (x,y) and bed height z are in units of grain diameters (e.g., order 1-10 mm)
          - Time step is in units of grain time-of-flight (e.g., around 0.1 s, see Liu et al. JGR:ES 124 (2019))
         """
-        super().__init__(Nx,Ny,c_0,f,u_0,skipmax,initial=initial, fb = fb,slope=slope,water_h=water_h,zfactor=zfactor,bed_h = bed_h,mu_c=mu_c,g_0=g_0)
+        super().__init__(Nx,Ny,c_0,f,u_0,skipmax,initial=initial, fb = fb,slope=slope,water_h=water_h,zfactor=zfactor,bed_h = bed_h,mu_c=mu_c,g_0=g_0,mask_index=mask_index)
         
         
     #########################################
