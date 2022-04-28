@@ -850,7 +850,7 @@ class set_q(ez):
 
     (see __init__ help for more info on parameters.)
     """
-    def __init__(self,Nx,Ny,c_0,f,u_0,skipmax,q_in,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50,mu_c=1.0,g_0=3.3333,,nu_t = 1.0,alpha_0 = 1e-2,alpha_1=1.0,mask_index=None):
+    def __init__(self,Nx,Ny,c_0,f,u_0,skipmax,q_in,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50,mu_c=1.0,g_0=3.3333,nu_t = 1.0,alpha_0 = 1e-2,alpha_1=1.0,mask_index=None):
         """
         Initialize the model       
         Parameters for ez superclass
