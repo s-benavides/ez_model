@@ -203,12 +203,17 @@ class ez():
         Entrains sites due to avalanching. Uses: mu_c, u_0, g_0, self.z, output: updated versions of self.ep, self.z.
         """    
         # Copy of arrays of interest, with potential masking
-        ep_temp = np.copy(self.ep[self.mask_index:-self.mask_index,:])
-        z_temp = np.copy(self.z[self.mask_index:-self.mask_index,:])
+        if self.mask_index==None:
+            mask_index=0
+        else:
+            mask_index=self.mask_index
+            
+        ep_temp = np.copy(self.ep[mask_index:self.Nx-mask_index,:])
+        z_temp = np.copy(self.z[mask_index:self.Nx-mask_index,:])
         
         # If water_h not nan, then apply water height dependence:
         if ~np.isnan(self.water_h):
-            depth = (self.build_bed(self.slope)[self.mask_index:-self.mask_index,:]+self.water_h - z_temp)
+            depth = (self.build_bed(self.slope)[mask_index:self.Nx-mask_index,:]+self.water_h - z_temp)
             depth[depth<0]=0.0
         else:
             depth = 1.0
@@ -239,7 +244,7 @@ class ez():
                 count+=choose
 
         # Subtract from places upstream of where we found them entrained.
-        ys,xs = np.where(ep_temp ^ self.ep[self.mask_index:-self.mask_index,:])
+        ys,xs = np.where(ep_temp ^ self.ep[mask_index:self.Nx-mask_index,:])
 
         z_temp[ys,xs] -=  1/self.zfactor
 
@@ -247,8 +252,8 @@ class ez():
         ep_out = np.copy(self.ep)
         z_out = np.copy(self.z)
         
-        ep_out[self.mask_index:-self.mask_index,:] = ep_temp
-        z_out[self.mask_index:-self.mask_index,:] = z_temp
+        ep_out[mask_index:self.Nx-mask_index,:] = ep_temp
+        z_out[mask_index:self.Nx-mask_index,:] = z_temp
         
         return ep_out,z_out
     
