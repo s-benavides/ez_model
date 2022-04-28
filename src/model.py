@@ -53,6 +53,7 @@ class ez():
         self.Ny = int(Ny)
         self.Xmesh,self.Ymesh = np.meshgrid(np.arange(self.Nx),np.arange(self.Ny)) 
         self.skipmax = skipmax
+        self.initial = initial
         self.c_0 = c_0
         self.f = f
         self.u_0 = u_0
