@@ -6,10 +6,12 @@ import tqdm
 import h5py
 from os import path
 import random
+from scipy.integrate import solve_bvp
+from scipy.interpolate import interp1d
 
 class ez():
     
-    def __init__(self,Nx,Ny,c_0,f,u_0,skipmax,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50,mu_c=1.0,g_0=3.3333,mask_index=None):
+    def __init__(self,Nx,Ny,c_0,f,u_0,skipmax,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50,mu_c=1.0,g_0=3.3333,nu_t = 1.0,alpha_0 = 1e-2,alpha_1=1.0,mask_index=None):
         """
         Initialize the model       
         Parameters for ez superclass
@@ -30,6 +32,10 @@ class ez():
         bed_h: sets the initial height of the bed. By default = 50 (to avoid going to zero in case some initialization channel is subtracted from the bed).
         mu_c: critical friction, before avalanching happens and causes entrainment. mu = ( (u_0*slope_x*depth)**2 + (g_0*slope_y)**2). Set to 1 by default (following Popovic et al. PNAS 2021).
         g_0 : prefactor to the gravitational contribution to the friction coefficient. Set to 3.333 by default so that the critical avalanche slope is the same as that of immersed sand (0.3).
+        nu_t : turbulent viscosity used in the calculation of the velocity profile. A value of nu_t = 1 and depth = 10 results in a boundary layer roughly 50 units wide. Note that the boundary layer size scales like sqrt(nu_t).
+        alpha_0: prefactor to the friction closure in the velocity profile calculation. A value of alpha_0 = 1.e-2 and a depth of 10 results in a velocity 100, which corresponds to aroung 1 m/s. NOTE: if changing depth by a 
+        factor c, then (in order to keep the same velocity profile), change nu_t and alpha_0 by the same factor c.
+        alpha_1: determines how much bed activity affects the friction. Set to 1 by default.
         
         mask: Not an input parameter, but it's a boolean array of size (Ny,Nx) set to True by default. If any location is set to False, then no  entrainment can happen at that location. This is for the purposes of setting no-flux boundary conditions in y (which are normally periodic).
         mask_index: (integer, = None by default) sets the number of rows (y-values) for which to set mask to False, thereby making the periodic boundaries no longer periodic and more like wall-like boundaries.
@@ -38,6 +44,9 @@ class ez():
         ----------
          - Length units (x,y) and bed height z are in units of grain diameters (e.g., order 1-10 mm)
          - Time step is in units of grain time-of-flight (e.g., around 0.1 s, see Liu et al. JGR:ES 124 (2019))
+         
+         This determines:
+          - g: gravitational acceleration in units of grain diameters and time-of-flight. Based on values of 1 mm and 0.1 s (based on Liu et al JGRES 2019), this gives a dimensionless value of about 100, which is what the default is set to be.
         """
         ## Input parameters to be communicated to other functions:        
         self.Nx = int(Nx)
@@ -56,6 +65,7 @@ class ez():
         self.mu_c = mu_c
         self.g_0 = g_0
         self.mask_index=mask_index
+        self.g = 100.0
        
         ####################
         ## INITIAL fields ##
@@ -380,6 +390,51 @@ class ez():
             z_temp[i,:] = slope*(self.Nx-np.arange(self.Nx)-1) + self.bed_h
 
         return z_temp
+    
+    
+    def u_calc(self):
+        """
+        Takes the current bed, performs an x-average (accounting for mean slope), and solves the 1D BVP:
+
+        nu_t dy(dy(u)) = - g slope_x depth + (1 + dy(depth)^2) alpha(e) u
+
+        where u is the depth-averaged flow, nu_t is the turbulent viscosity, and alpha is the 'closure' relating the entrainment field (averaged in x) to a friction. 
+
+        returns u
+        """
+        # Calculate depth:
+        # If water_h not nan, then apply water height dependence:
+        if ~np.isnan(self.water_h):
+            depth_m_full = (self.build_bed(self.slope)[self.mask_index:-self.mask_index,:]+self.water_h - self.z[self.mask_index:-self.mask_index,:])
+            depth_m_full[depth_m_full<0]=0.0
+        else:
+            print("WARNING: Trying to calculate u, but water_h is set to nan. Either don't calculate u, or give water_h a numerical value. Returning...")
+            return
+
+        # Then take the x-average of everything
+        D = np.mean(depth_m_full,axis=1)
+        ep_temp = np.mean(self.ep[self.mask_index:-self.mask_index,:],axis=1)
+
+        ys = np.arange(len(D))
+        Dint = interp1d(ys,D)
+        epint = interp1d(ys,ep_temp)
+
+        def fun(y,u):
+            return np.vstack((u[1],-self.g*Dint(y)*self.slope/self.nu_t+self.alpha_0*(1+self.alpha_1*epint(y))/self.nu_t*u[0]))
+
+        def bc(ua,ub):
+            return np.array([ua[0],ub[0]])
+
+        u_0 = np.zeros((2,ys.size))
+
+        u = solve_bvp(fun,bc,ys,u_0)
+
+        # Fill in and update full array
+        u_out = np.zeros(self.z.shape,dtype=float)
+
+        u_out[self.mask_index:-self.mask_index,:] = np.tile(u.sol(ys)[0],(self.Nx,1)).T
+
+        return u_out
     
     #########################################
     ####       Import/Export      ###########
@@ -795,10 +850,10 @@ class set_q(ez):
 
     (see __init__ help for more info on parameters.)
     """
-    def __init__(self,Nx,Ny,c_0,f,u_0,skipmax,q_in,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50,mu_c=1.0,g_0=3.3333,mask_index=None):
+    def __init__(self,Nx,Ny,c_0,f,u_0,skipmax,q_in,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50,mu_c=1.0,g_0=3.3333,,nu_t = 1.0,alpha_0 = 1e-2,alpha_1=1.0,mask_index=None):
         """
-        Initialize the model
-        Parameters for set_q subclass
+        Initialize the model       
+        Parameters for ez superclass
         ----------
         Nx: number of gridpoints in x-direction. One gridpoint represents a grain diameter. 
         Ny: number of gridpoints in y-direction. One gridpoint represents a grain diameter. 
@@ -806,6 +861,7 @@ class set_q(ez):
         f: probability of random entrainment entraining due to fluid.
         u_0: prefactor to the shear-stress component of the friction coefficient (see mu_c below). Typical values to use: u_0 * depth ~ 50 or smaller, to avoid runaway effects.
         skipmax: (average) hop length in units of grain diameters. Hop lengths are binomially distributed with a mean of skipmax. (See dx_calc function)
+        q_in: number of grains dropped at the top of the domain (randomly) at every time step. If q_in < 1, then 1 grain is dropped every 1/q_in time-steps.
         
         Optional parameters:
         initial: initial condition -- all sites are activated with a probability equal to initial. set to zero by default
@@ -816,6 +872,10 @@ class set_q(ez):
         bed_h: sets the initial height of the bed. By default = 50 (to avoid going to zero in case some initialization channel is subtracted from the bed).
         mu_c: critical friction, before avalanching happens and causes entrainment. mu = ( (u_0*slope_x*depth)**2 + (g_0*slope_y)**2). Set to 1 by default (following Popovic et al. PNAS 2021).
         g_0 : prefactor to the gravitational contribution to the friction coefficient. Set to 3.333 by default so that the critical avalanche slope is the same as that of immersed sand (0.3).
+        nu_t : turbulent viscosity used in the calculation of the velocity profile. A value of nu_t = 1 and depth = 10 results in a boundary layer roughly 50 units wide. Note that the boundary layer size scales like sqrt(nu_t).
+        alpha_0: prefactor to the friction closure in the velocity profile calculation. A value of alpha_0 = 1.e-2 and a depth of 10 results in a velocity 100, which corresponds to aroung 1 m/s. NOTE: if changing depth by a 
+        factor c, then (in order to keep the same velocity profile), change nu_t and alpha_0 by the same factor c.
+        alpha_1: determines how much bed activity affects the friction. Set to 1 by default.
         
         mask: Not an input parameter, but it's a boolean array of size (Ny,Nx) set to True by default. If any location is set to False, then no  entrainment can happen at that location. This is for the purposes of setting no-flux boundary conditions in y (which are normally periodic).
         mask_index: (integer, = None by default) sets the number of rows (y-values) for which to set mask to False, thereby making the periodic boundaries no longer periodic and more like wall-like boundaries.
@@ -824,8 +884,12 @@ class set_q(ez):
         ----------
          - Length units (x,y) and bed height z are in units of grain diameters (e.g., order 1-10 mm)
          - Time step is in units of grain time-of-flight (e.g., around 0.1 s, see Liu et al. JGR:ES 124 (2019))
+         
+         This determines:
+          - g: gravitational acceleration in units of grain diameters and time-of-flight. Based on values of 1 mm and 0.1 s (based on Liu et al JGRES 2019), this gives a dimensionless value of about 100, which is what the default is set to be.
         """
-        super().__init__(Nx,Ny,c_0,f,u_0,skipmax,initial=initial, fb = fb,slope=slope,water_h=water_h,zfactor=zfactor,bed_h = bed_h,mu_c=mu_c,g_0=g_0,mask_index=mask_index)
+        
+        super().__init__(Nx,Ny,c_0,f,u_0,skipmax,initial=initial, fb = fb,slope=slope,water_h=water_h,zfactor=zfactor,bed_h = bed_h,mu_c=mu_c,g_0=g_0,nu_t = nu_t,alpha_0 = alpha_0,alpha_1=alpha_1,mask_index=mask_index)
         ## Input parameters to be communicated to other functions:        
         if q_in>Ny:
             print("q_in > Ny ! Setting q_in = Ny.")
@@ -996,10 +1060,10 @@ class set_f(ez):
     In this model, the main input parameter is f, which is the probability that extreme events in fluid stresses entrain a grain and move it downstream.
     The entrained grains flow out of one end and, importantly, come back into the other end: this mode has periodic boundary conditions in all directions.
     """
-    def __init__(self,Nx,Ny,c_0,f,u_0,skipmax,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50,mu_c=1.0,g_0=3.3333,mask_index=None):
+    def __init__(self,Nx,Ny,c_0,f,u_0,skipmax,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50,mu_c=1.0,g_0=3.3333,nu_t = 1.0,alpha_0 = 1e-2,alpha_1=1.0,mask_index=None):
         """
-        Initialize the model
-        Parameters for set_f subclass
+        Initialize the model       
+        Parameters for ez superclass
         ----------
         Nx: number of gridpoints in x-direction. One gridpoint represents a grain diameter. 
         Ny: number of gridpoints in y-direction. One gridpoint represents a grain diameter. 
@@ -1017,6 +1081,10 @@ class set_f(ez):
         bed_h: sets the initial height of the bed. By default = 50 (to avoid going to zero in case some initialization channel is subtracted from the bed).
         mu_c: critical friction, before avalanching happens and causes entrainment. mu = ( (u_0*slope_x*depth)**2 + (g_0*slope_y)**2). Set to 1 by default (following Popovic et al. PNAS 2021).
         g_0 : prefactor to the gravitational contribution to the friction coefficient. Set to 3.333 by default so that the critical avalanche slope is the same as that of immersed sand (0.3).
+        nu_t : turbulent viscosity used in the calculation of the velocity profile. A value of nu_t = 1 and depth = 10 results in a boundary layer roughly 50 units wide. Note that the boundary layer size scales like sqrt(nu_t).
+        alpha_0: prefactor to the friction closure in the velocity profile calculation. A value of alpha_0 = 1.e-2 and a depth of 10 results in a velocity 100, which corresponds to aroung 1 m/s. NOTE: if changing depth by a 
+        factor c, then (in order to keep the same velocity profile), change nu_t and alpha_0 by the same factor c.
+        alpha_1: determines how much bed activity affects the friction. Set to 1 by default.
         
         mask: Not an input parameter, but it's a boolean array of size (Ny,Nx) set to True by default. If any location is set to False, then no  entrainment can happen at that location. This is for the purposes of setting no-flux boundary conditions in y (which are normally periodic).
         mask_index: (integer, = None by default) sets the number of rows (y-values) for which to set mask to False, thereby making the periodic boundaries no longer periodic and more like wall-like boundaries.
@@ -1025,8 +1093,12 @@ class set_f(ez):
         ----------
          - Length units (x,y) and bed height z are in units of grain diameters (e.g., order 1-10 mm)
          - Time step is in units of grain time-of-flight (e.g., around 0.1 s, see Liu et al. JGR:ES 124 (2019))
+         
+         This determines:
+          - g: gravitational acceleration in units of grain diameters and time-of-flight. Based on values of 1 mm and 0.1 s (based on Liu et al JGRES 2019), this gives a dimensionless value of about 100, which is what the default is set to be.  
         """
-        super().__init__(Nx,Ny,c_0,f,u_0,skipmax,initial=initial, fb = fb,slope=slope,water_h=water_h,zfactor=zfactor,bed_h = bed_h,mu_c=mu_c,g_0=g_0,mask_index=mask_index)
+        
+        super().__init__(Nx,Ny,c_0,f,u_0,skipmax,initial=initial, fb = fb,slope=slope,water_h=water_h,zfactor=zfactor,bed_h = bed_h,mu_c=mu_c,g_0=g_0,nu_t = nu_t,alpha_0 = alpha_0,alpha_1=alpha_1,mask_index=mask_index)
         
         
     #########################################
