@@ -8,34 +8,26 @@ from os import path
 import random
 from scipy.integrate import solve_bvp
 from scipy.interpolate import interp1d
+from scipy.special import erf
+from datetime import date
 
 class ez():
     
-    def __init__(self,Nx,Ny,c_0,f,u_0,skipmax,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50,mu_c=1.0,g_0=3.3333,nu_t = 1.0,alpha_0 = 1e-2,alpha_1=1.0,mask_index=None):
+    def __init__(self,Nx,Ny,c_0,skipmax=3,initial=0.0,slope=0,zfactor=2000,bed_h = 50,mask_index=None):
         """
         Initialize the model       
         Parameters for ez superclass
         ----------
         Nx: number of gridpoints in x-direction. One gridpoint represents a grain diameter. 
         Ny: number of gridpoints in y-direction. One gridpoint represents a grain diameter. 
-        c_0: prefactor to the probability of entrainment given an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). Typical values to use: c_0 * depth ~ 300 if you want your equilibrium slope to be roughly 1e-3.
-        f: probability of random entrainment entraining due to fluid.
-        u_0: prefactor to the shear-stress component of the friction coefficient (see mu_c below). Typical values to use: u_0 * depth ~ 50 or smaller, to avoid runaway effects.
-        skipmax: (average) hop length in units of grain diameters. Hop lengths are binomially distributed with a mean of skipmax. (See dx_calc function)
+        c_0: prefactor to the probability of entrainment given an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). Typical values to use depend on what mode you are using (see set_f or set_q).
         
         Optional parameters:
+        skipmax: (average) hop length in units of grain diameters. Hop lengths are binomially distributed with a mean of skipmax. (See dx_calc function). Set to 3 by default
         initial: initial condition -- all sites are activated with a probability equal to initial. set to zero by default
-        fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep. set to 0.3 by default
         slope: if slope>0, will build a bed with slope = -slope as an initial condition. Used mainly in the 'set_f' (periodic boundaries) mode. set to zero by default
-        water_h: if water_h =/= nan, then collision probabilities and entrainment probabilities will depend also on the 'depth' of the channel. In other words, c = c_0*depth*slope, where depth = water_h + initial z - current z. set to nan by default
         zfactor: anisotropic scaling of the vertical units. Default value is 2000, so that one entrainment or disentrainment from the bed (equalling one grain) removes 1/zfactor from the height.
         bed_h: sets the initial height of the bed. By default = 50 (to avoid going to zero in case some initialization channel is subtracted from the bed).
-        mu_c: critical friction, before avalanching happens and causes entrainment. mu = ( (u_0*slope_x*depth)**2 + (g_0*slope_y)**2). Set to 1 by default (following Popovic et al. PNAS 2021).
-        g_0 : prefactor to the gravitational contribution to the friction coefficient. Set to 3.333 by default so that the critical avalanche slope is the same as that of immersed sand (0.3).
-        nu_t : turbulent viscosity used in the calculation of the velocity profile. A value of nu_t = 1 and depth = 10 results in a boundary layer roughly 50 units wide. Note that the boundary layer size scales like sqrt(nu_t).
-        alpha_0: prefactor to the friction closure in the velocity profile calculation. A value of alpha_0 = 1.e-2 and a depth of 10 results in a velocity 100, which corresponds to aroung 1 m/s. NOTE: if changing depth by a 
-        factor c, then (in order to keep the same velocity profile), change nu_t and alpha_0 by the same factor c.
-        alpha_1: determines how much bed activity affects the friction. Set to 1 by default.
         
         mask: Not an input parameter, but it's a boolean array of size (Ny,Nx) set to True by default. If any location is set to False, then no  entrainment can happen at that location. This is for the purposes of setting no-flux boundary conditions in y (which are normally periodic).
         mask_index: (integer, = None by default) sets the number of rows (y-values) for which to set mask to False, thereby making the periodic boundaries no longer periodic and more like wall-like boundaries.
@@ -55,16 +47,10 @@ class ez():
         self.skipmax = skipmax
         self.initial = initial
         self.c_0 = c_0
-        self.f = f
-        self.u_0 = u_0
         self.q_in=0.0 
-        self.fb = fb
         self.slope=slope
-        self.water_h = water_h # Water level above initial bed.
         self.zfactor = zfactor # Scaling the slope calculation to use steeper integer slopes and thus get better resolved slopes without having very steep ones.
         self.bed_h = bed_h
-        self.mu_c = mu_c
-        self.g_0 = g_0
         self.mask_index=mask_index
         self.g = 100.0
        
@@ -150,113 +136,6 @@ class ez():
         else:
             return c_temp
 
-
-    ###############################
-    # Random entrainment by fluid #
-    ###############################
-    def f_entrain(self):
-        """
-        Entrains sites randomly due to fluid perturbation. Input: f, output: self.ep, self.z.
-        """
-        
-        # Set A (what will be the probability matrix) to zero:
-        p_temp = self.f*np.ones((self.Ny,self.Nx))
-        
-        # Apply mask:
-        p_temp *= self.mask
-        
-        # If water_h not nan, then apply water height dependence (based on initial bed):
-        if ~np.isnan(self.water_h):
-            depth = (self.build_bed(self.slope)+self.water_h - self.z)
-            depth[depth<0]=0.0
-        else:
-            depth = 1.0
-        p_temp *= depth
-            
-        # # Include fluid feedback:
-        # p_temp *= (1-self.fb*self.e)        
-                
-        # Copy of arrays of interest
-        ep_temp = np.copy(self.ep)
-        z_temp = np.copy(self.z)
-                
-        #Generate random numbers between zero and one for the whole domain
-        rndc = self.rng.uniform(0.0, 1.0,size=(self.Ny,self.Nx))
-        
-        # In places where p > rndc, entrainments happen.
-        ep_temp[rndc<=p_temp] = True
-
-        # Subtract from places upstream of where we found them entrained.
-        ys,xs = np.where(ep_temp ^ self.ep)
-#         dxs = self.dx_mat[ys,xs] 
-        dxs = self.skipmax # Advecting with mean flow just to avoid overlaps
-        xs = (xs-dxs)%self.Nx
-        
-        z_temp[ys,xs] -=  1/self.zfactor
-        
-        return ep_temp,z_temp
-    
-    ###############
-    # Avalanching #
-    ###############
-    def a_entrain(self):
-        """
-        Entrains sites due to avalanching. Uses: mu_c, u_0, g_0, self.z, output: updated versions of self.ep, self.z.
-        """    
-        # Copy of arrays of interest, with potential masking
-        if self.mask_index==None:
-            mask_index=0
-        else:
-            mask_index=self.mask_index
-            
-        ep_temp = np.copy(self.ep[mask_index:self.Nx-mask_index,:])
-        z_temp = np.copy(self.z[mask_index:self.Nx-mask_index,:])
-        
-        # If water_h not nan, then apply water height dependence:
-        if ~np.isnan(self.water_h):
-            depth = (self.build_bed(self.slope)[mask_index:self.Nx-mask_index,:]+self.water_h - z_temp)
-            depth[depth<0]=0.0
-        else:
-            depth = 1.0
-        
-        # Finally, apply avalanche condition
-        slope_y = np.gradient(z_temp,axis=0)
-        slope_x = np.gradient(z_temp,axis=1)
-        mu = ((self.u_0*slope_x*depth)**2 + (self.g_0*slope_y)**2)**(0.5)
-        
-
-        # Entrain grains with the smallest depths
-        depths = np.unique(list(sorted((depth*(mu>self.mu_c)).flatten())))
-        depths = depths[depths>0]
-        if (len(depths)>0):
-            inds_max = 0
-            for d in depths:
-                inds_max += len(np.argwhere(depth==d))
-            num = min([10,inds_max])
-            ii = 0 
-            count = 0
-            while count<num:
-                inds = np.argwhere(depth==depths[ii])
-                choose = np.min([len(inds),(num-count)])
-                inds_rand = self.rng.choice(inds,choose,replace=False)
-                ys,xs = inds_rand.T
-                ep_temp[ys,xs]=True
-                ii+=1
-                count+=choose
-
-        # Subtract from places upstream of where we found them entrained.
-        ys,xs = np.where(ep_temp ^ self.ep[mask_index:self.Nx-mask_index,:])
-
-        z_temp[ys,xs] -=  1/self.zfactor
-
-        # Fill in and update full array
-        ep_out = np.copy(self.ep)
-        z_out = np.copy(self.z)
-        
-        ep_out[mask_index:self.Nx-mask_index,:] = ep_temp
-        z_out[mask_index:self.Nx-mask_index,:] = z_temp
-        
-        return ep_out,z_out
     
     ##################################
     # Calculates bed activity (flux) #
@@ -396,72 +275,17 @@ class ez():
             z_temp[i,:] = slope*(self.Nx-np.arange(self.Nx)-1) + self.bed_h
 
         return z_temp
-    
-    
-    def u_calc(self):
-        """
-        Takes the current bed, performs an x-average (accounting for mean slope), and solves the 1D BVP:
 
-        nu_t dy(dy(u)) = - g slope_x depth + (1 + dy(depth)^2) alpha(e) u
-
-        where u is the depth-averaged flow, nu_t is the turbulent viscosity, and alpha is the 'closure' relating the entrainment field (averaged in x) to a friction. 
-
-        returns u
-        """
-        # Calculate depth:
-        # If water_h not nan, then apply water height dependence:
-        if ~np.isnan(self.water_h):
-            depth_m_full = (self.build_bed(self.slope)[self.mask_index:-self.mask_index,:]+self.water_h - self.z[self.mask_index:-self.mask_index,:])
-            depth_m_full[depth_m_full<0]=0.0
-        else:
-            print("WARNING: Trying to calculate u, but water_h is set to nan. Either don't calculate u, or give water_h a numerical value. Returning...")
-            return
-
-        # Then take the x-average of everything
-        D = np.mean(depth_m_full,axis=1)
-        ep_temp = np.mean(self.ep[self.mask_index:-self.mask_index,:],axis=1)
-
-        ys = np.arange(len(D))
-        Dint = interp1d(ys,D)
-        epint = interp1d(ys,ep_temp)
-
-        def fun(y,u):
-            return np.vstack((u[1],-self.g*Dint(y)*self.slope/self.nu_t+self.alpha_0*(1+self.alpha_1*epint(y))/self.nu_t*u[0]))
-
-        def bc(ua,ub):
-            return np.array([ua[0],ub[0]])
-
-        u_0 = np.zeros((2,ys.size))
-
-        u = solve_bvp(fun,bc,ys,u_0)
-
-        # Fill in and update full array
-        u_out = np.zeros(self.z.shape,dtype=float)
-
-        u_out[self.mask_index:-self.mask_index,:] = np.tile(u.sol(ys)[0],(self.Nx,1)).T
-
-        return u_out
     
     #########################################
     ####       Import/Export      ###########
     #########################################
-
-    def export_name(self):
-        c0str = str(self.c_0).replace(".", "d")
-        fstr = str(self.f).replace(".", "d")
-        return 'ez_data_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_qin_'+str(self.q_in).replace(".","d")+'_c0_'+c0str+'_f_'+fstr+'_skip_'+str(self.skipmax)
  
     def get_state(self):
         """
         Get current state of model: returns [tstep,z,ep,p,dx_mat]
         """
         return [self.tstep,self.z,self.ep,self.p,self.dx_mat]
-
-    def get_params(self):
-        """
-        Get parameters of model: returns [Nx,Ny,c_0,f,u_0,skipmax,initial,fb,slope,water_h,zfactor,bed_h,mu_c,g_0]
-        """
-        return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'u_0':self.u_0,'skipmax':self.skipmax,'initial':self.initial,'fb':self.fb,'slope':self.slope,'water_h':self.water_h,'zfactor':self.zfactor,'bed_h':self.bed_h,'mu_c':self.mu_c,'g_0':self.g_0}
     
     def get_scalars(self):
         """
@@ -856,35 +680,27 @@ class set_q(ez):
 
     (see __init__ help for more info on parameters.)
     """
-    def __init__(self,Nx,Ny,c_0,f,u_0,skipmax,q_in,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50,mu_c=1.0,g_0=3.3333,nu_t = 1.0,alpha_0 = 1e-2,alpha_1=1.0,mask_index=None):
+    def __init__(self,Nx,Ny,c_0,f,q_in,skipmax=3,initial=0.0,slope=0,zfactor=2000,bed_h = 50,mask_index=None,fb=0.3):
+        
         """
         Initialize the model       
         Parameters for ez superclass
         ----------
         Nx: number of gridpoints in x-direction. One gridpoint represents a grain diameter. 
         Ny: number of gridpoints in y-direction. One gridpoint represents a grain diameter. 
-        c_0: prefactor to the probability of entrainment given an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). Typical values to use: c_0 * depth ~ 300 if you want your equilibrium slope to be roughly 1e-3.
+        c_0: prefactor to the probability of entrainment given an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). Typical values to use: c_0 ~ 300 if you want your equilibrium slope to be roughly 1e-3. 
         f: probability of random entrainment entraining due to fluid.
-        u_0: prefactor to the shear-stress component of the friction coefficient (see mu_c below). Typical values to use: u_0 * depth ~ 50 or smaller, to avoid runaway effects.
-        skipmax: (average) hop length in units of grain diameters. Hop lengths are binomially distributed with a mean of skipmax. (See dx_calc function)
         q_in: number of grains dropped at the top of the domain (randomly) at every time step. If q_in < 1, then 1 grain is dropped every 1/q_in time-steps.
         
         Optional parameters:
+        skipmax: (average) hop length in units of grain diameters. Hop lengths are binomially distributed with a mean of skipmax. (See dx_calc function). Set to 3 by default.
         initial: initial condition -- all sites are activated with a probability equal to initial. set to zero by default
-        fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep. set to 0.3 by default
         slope: if slope>0, will build a bed with slope = -slope as an initial condition. Used mainly in the 'set_f' (periodic boundaries) mode. set to zero by default
-        water_h: if water_h =/= nan, then collision probabilities and entrainment probabilities will depend also on the 'depth' of the channel. In other words, c = c_0*depth*slope, where depth = water_h + initial z - current z. set to nan by default
         zfactor: anisotropic scaling of the vertical units. Default value is 2000, so that one entrainment or disentrainment from the bed (equalling one grain) removes 1/zfactor from the height.
-        bed_h: sets the initial height of the bed. By default = 50 (to avoid going to zero in case some initialization channel is subtracted from the bed).
-        mu_c: critical friction, before avalanching happens and causes entrainment. mu = ( (u_0*slope_x*depth)**2 + (g_0*slope_y)**2). Set to 1 by default (following Popovic et al. PNAS 2021).
-        g_0 : prefactor to the gravitational contribution to the friction coefficient. Set to 3.333 by default so that the critical avalanche slope is the same as that of immersed sand (0.3).
-        nu_t : turbulent viscosity used in the calculation of the velocity profile. A value of nu_t = 1 and depth = 10 results in a boundary layer roughly 50 units wide. Note that the boundary layer size scales like sqrt(nu_t).
-        alpha_0: prefactor to the friction closure in the velocity profile calculation. A value of alpha_0 = 1.e-2 and a depth of 10 results in a velocity 100, which corresponds to aroung 1 m/s. NOTE: if changing depth by a 
-        factor c, then (in order to keep the same velocity profile), change nu_t and alpha_0 by the same factor c.
-        alpha_1: determines how much bed activity affects the friction. Set to 1 by default.
-        
+        bed_h: sets the initial height of the bed. By default = 50 (to avoid going to zero in case some initialization channel is subtracted from the bed).        
         mask: Not an input parameter, but it's a boolean array of size (Ny,Nx) set to True by default. If any location is set to False, then no  entrainment can happen at that location. This is for the purposes of setting no-flux boundary conditions in y (which are normally periodic).
         mask_index: (integer, = None by default) sets the number of rows (y-values) for which to set mask to False, thereby making the periodic boundaries no longer periodic and more like wall-like boundaries.
+        fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep. set to 0.3 by default
         
         Units:
         ----------
@@ -895,7 +711,7 @@ class set_q(ez):
           - g: gravitational acceleration in units of grain diameters and time-of-flight. Based on values of 1 mm and 0.1 s (based on Liu et al JGRES 2019), this gives a dimensionless value of about 100, which is what the default is set to be.
         """
         
-        super().__init__(Nx,Ny,c_0,f,u_0,skipmax,initial=initial, fb = fb,slope=slope,water_h=water_h,zfactor=zfactor,bed_h = bed_h,mu_c=mu_c,g_0=g_0,nu_t = nu_t,alpha_0 = alpha_0,alpha_1=alpha_1,mask_index=mask_index)
+        super().__init__(Nx,Ny,c_0,skipmax=skipmax,initial=initial,slope=slope,zfactor=zfactor,bed_h = bed_h,mask_index=mask_index)
         ## Input parameters to be communicated to other functions:        
         if q_in>Ny:
             print("q_in > Ny ! Setting q_in = Ny.")
@@ -903,6 +719,8 @@ class set_q(ez):
         else:
             self.q_in = q_in
         
+        self.f = f
+        self.fb = fb
         self.scrit = 1/3/self.c_0
         
         ####################
@@ -978,9 +796,6 @@ class set_q(ez):
             ## Random entrainment by fluid:
             self.ep,self.z = self.f_entrain()
         
-        ## Avalanches:
-        self.ep,self.z = self.a_entrain()
-        
         ## Add to time:
         self.tstep += 1
        
@@ -1010,17 +825,8 @@ class set_q(ez):
             p_temp += self.c_calc(rollx,1)*np.roll(np.roll(etemp,1,axis=0),rollx,axis = 1)
             p_temp += self.c_calc(rollx,-1)*np.roll(np.roll(etemp,-1,axis=0),rollx,axis = 1)
         
-
         # Include fluid feedback:
         p_temp = p_temp*(1-self.fb*self.e)*self.c_0
-        
-        # If water_h not nan, then apply water height dependence:
-        if ~np.isnan(self.water_h):
-            depth = (self.build_bed(self.slope)+self.water_h - self.z)
-            depth[depth<0]=0.0
-        else:
-            depth = 1.0
-        p_temp *= depth
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
@@ -1032,6 +838,40 @@ class set_q(ez):
         p_temp[:,0]=0.0
                 
         return p_temp
+    
+
+    ###############################
+    # Random entrainment by fluid #
+    ###############################
+    def f_entrain(self):
+        """
+        Entrains sites randomly due to fluid perturbation. Input: f, output: self.ep, self.z.
+        """
+        
+        # Set A (what will be the probability matrix) to zero:
+        p_temp = self.f*np.ones((self.Ny,self.Nx))
+        
+        # Apply mask:
+        p_temp *= self.mask
+            
+        # Copy of arrays of interest
+        ep_temp = np.copy(self.ep)
+        z_temp = np.copy(self.z)
+                
+        #Generate random numbers between zero and one for the whole domain
+        rndc = self.rng.uniform(0.0, 1.0,size=(self.Ny,self.Nx))
+        
+        # In places where p > rndc, entrainments happen.
+        ep_temp[rndc<=p_temp] = True
+
+        # Subtract from places upstream of where we found them entrained.
+        ys,xs = np.where(ep_temp ^ self.ep)
+        dxs = self.skipmax # Advecting with mean flow just to avoid overlaps
+        xs = (xs-dxs)%self.Nx
+        
+        z_temp[ys,xs] -=  1/self.zfactor
+        
+        return ep_temp,z_temp
     
     ###########################
     # Calculates q_out (flux) #
@@ -1047,12 +887,18 @@ class set_q(ez):
     ##########
     # Extras #
     ##########
+    
+    def export_name(self):
+        c0str = str(self.c_0).replace(".", "d")
+        fstr = str(self.f).replace(".", "d")
+        qstr = str(self.q_in).replace(".", "d")
+        return 'ez_data_Nx_set_q_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_c_0_'+c0str+'_f_'+fstr+'_q_in_'+qstr+str(date.today())
 
     def get_params(self):
         """
-        Get parameters of model: returns [Nx,Ny,c_0,f,u_0,skipmax,initial,fb,slope,water_h,zfactor,bed_h,mu_c,g_0,q_in]
+        Get parameters of model: returns [Nx,Ny,c_0,f,q_in,skipmax,initial,slope,zfactor,bed_h,mask_index,fb]
         """
-        return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'u_0':self.u_0,'skipmax':self.skipmax,'initial':self.initial,'fb':self.fb,'slope':self.slope,'water_h':self.water_h,'zfactor':self.zfactor,'bed_h':self.bed_h,'mu_c':self.mu_c,'g_0':self.g_0,'q_in':self.q_in}
+        return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'f':self.f,'q_in':self.q_in,'skipmax':self.skipmax,'initial':self.initial,'slope':self.slope,'zfactor':self.zfactor,'bed_h':self.bed_h,'mask_index':self.mask_index,'fb':self.fb}
     
     def get_scalars(self):
         """
@@ -1066,34 +912,32 @@ class set_f(ez):
     In this model, the main input parameter is f, which is the probability that extreme events in fluid stresses entrain a grain and move it downstream.
     The entrained grains flow out of one end and, importantly, come back into the other end: this mode has periodic boundary conditions in all directions.
     """
-    def __init__(self,Nx,Ny,c_0,f,u_0,skipmax,initial=0.0, fb = 0.3,slope=0,water_h=np.nan,zfactor=2000,bed_h = 50,mu_c=1.0,g_0=3.3333,nu_t = 1.0,alpha_0 = 1e-2,alpha_1=1.0,mask_index=None):
+    def __init__(self,Nx,Ny,c_0,u_0,u_c,u_sig,alpha_0,nu_t,skipmax=3,initial=0.0,slope=0,zfactor=2000,bed_h = 50,mask_index=None,g_0=3.33333,mu_c=1.0,water_h=0.0,alpha_1=1.0):
         """
         Initialize the model       
         Parameters for ez superclass
         ----------
         Nx: number of gridpoints in x-direction. One gridpoint represents a grain diameter. 
         Ny: number of gridpoints in y-direction. One gridpoint represents a grain diameter. 
-        c_0: prefactor to the probability of entrainment given an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). Typical values to use: c_0 * depth ~ 300 if you want your equilibrium slope to be roughly 1e-3.
-        f: probability of random entrainment entraining due to fluid.
-        u_0: prefactor to the shear-stress component of the friction coefficient (see mu_c below). Typical values to use: u_0 * depth ~ 50 or smaller, to avoid runaway effects.
-        skipmax: (average) hop length in units of grain diameters. Hop lengths are binomially distributed with a mean of skipmax. (See dx_calc function)
+        c_0: prefactor to the probability of entrainment given an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). Typical values to use: ?? if you want your equilibrium slope to be roughly 1e-3.
+        u_0: prefactor to the shear-stress component of the friction coefficient (see mu_c below). Typical values to use: ??.
+        u_c: The critical velocity, above which random fluid entrainments become more and more common. Typical values include: ??
+        u_sig: Determines how sharp the probability of random fluid entrainment increases from 0 to 1, when u ~ u_c. Typical values include: ?? 
+        alpha_0: prefactor to the friction closure in the velocity profile calculation. A value of alpha_0 = 1.e-2 and a depth of 10 results in a velocity 100, which corresponds to aroung 1 m/s. NOTE: if changing depth by a factor c, then (in order to keep the same velocity profile), change nu_t and alpha_0 by the same factor c.
+        nu_t : turbulent viscosity used in the calculation of the velocity profile. A value of nu_t = 1 and depth = 10 results in a boundary layer roughly 50 units wide. Note that the boundary layer size scales like sqrt(nu_t). NOTE: if you want to have periodic boundary conditions in the y-direction, set nu_t = 0. Then the velocity will be determined by a balance of friction and the gravitational acceleration.
         
         Optional parameters:
+        skipmax: (average) hop length in units of grain diameters. Hop lengths are binomially distributed with a mean of skipmax. (See dx_calc function). Set to 3 by default.
         initial: initial condition -- all sites are activated with a probability equal to initial. set to zero by default
-        fb: fluid feedback parameter. An active site will be (1-fb) times less likely to be entrained in the next timestep. set to 0.3 by default
         slope: if slope>0, will build a bed with slope = -slope as an initial condition. Used mainly in the 'set_f' (periodic boundaries) mode. set to zero by default
-        water_h: if water_h =/= nan, then collision probabilities and entrainment probabilities will depend also on the 'depth' of the channel. In other words, c = c_0*depth*slope, where depth = water_h + initial z - current z. set to nan by default
         zfactor: anisotropic scaling of the vertical units. Default value is 2000, so that one entrainment or disentrainment from the bed (equalling one grain) removes 1/zfactor from the height.
         bed_h: sets the initial height of the bed. By default = 50 (to avoid going to zero in case some initialization channel is subtracted from the bed).
-        mu_c: critical friction, before avalanching happens and causes entrainment. mu = ( (u_0*slope_x*depth)**2 + (g_0*slope_y)**2). Set to 1 by default (following Popovic et al. PNAS 2021).
-        g_0 : prefactor to the gravitational contribution to the friction coefficient. Set to 3.333 by default so that the critical avalanche slope is the same as that of immersed sand (0.3).
-        nu_t : turbulent viscosity used in the calculation of the velocity profile. A value of nu_t = 1 and depth = 10 results in a boundary layer roughly 50 units wide. Note that the boundary layer size scales like sqrt(nu_t).
-        alpha_0: prefactor to the friction closure in the velocity profile calculation. A value of alpha_0 = 1.e-2 and a depth of 10 results in a velocity 100, which corresponds to aroung 1 m/s. NOTE: if changing depth by a 
-        factor c, then (in order to keep the same velocity profile), change nu_t and alpha_0 by the same factor c.
-        alpha_1: determines how much bed activity affects the friction. Set to 1 by default.
-        
         mask: Not an input parameter, but it's a boolean array of size (Ny,Nx) set to True by default. If any location is set to False, then no  entrainment can happen at that location. This is for the purposes of setting no-flux boundary conditions in y (which are normally periodic).
         mask_index: (integer, = None by default) sets the number of rows (y-values) for which to set mask to False, thereby making the periodic boundaries no longer periodic and more like wall-like boundaries.
+        g_0 : prefactor to the gravitational contribution to the friction coefficient. Set to 3.333 by default so that the critical avalanche slope is the same as that of immersed sand (0.3).
+        mu_c: critical friction, before avalanching happens and causes entrainment. mu = ( (u_0*u)**4 + (g_0*slope_y)**2). Set to 1 by default (following Popovic et al. PNAS 2021).
+        water_h: used for calculating: depth = water_h + initial z - current z. Depth is used in the calculation of u, as well as in avalanche entrainment, a_entrain. set to 0 by default.         
+        alpha_1: determines how much bed activity affects the friction. Set to 1 by default.     
         
         Units:
         ----------
@@ -1104,8 +948,20 @@ class set_f(ez):
           - g: gravitational acceleration in units of grain diameters and time-of-flight. Based on values of 1 mm and 0.1 s (based on Liu et al JGRES 2019), this gives a dimensionless value of about 100, which is what the default is set to be.  
         """
         
-        super().__init__(Nx,Ny,c_0,f,u_0,skipmax,initial=initial, fb = fb,slope=slope,water_h=water_h,zfactor=zfactor,bed_h = bed_h,mu_c=mu_c,g_0=g_0,nu_t = nu_t,alpha_0 = alpha_0,alpha_1=alpha_1,mask_index=mask_index)
+        super().__init__(Nx,Ny,c_0,skipmax=skipmax,initial=initial,slope=slope,zfactor=zfactor,bed_h = bed_h,mask_index=mask_index)
         
+        self.u_0 = u_0
+        self.u_c = u_c
+        self.u_sig = u_sig
+        self.alpha_0 = alpha_0
+        self.nu_t = nu_t
+        self.g_0 = g_0
+        self.mu_c = mu_c
+        self.water_h = water_h
+        self.alpha_1 = alpha_1
+        
+        ## Flow velocity:
+        self.u = self.u_calc()        
         
     #########################################
     ####       Dynamics and Calcs      ######
@@ -1126,6 +982,9 @@ class set_f(ez):
         ## Copies and auxiliary entrainment matrix
         self.e = np.copy(self.ep)    
         
+        ## Flow velocity:
+        self.u = self.u_calc()
+        
         if bal:        
             temp = np.sum(self.e)+np.int(np.round(np.sum(self.z)*self.zfactor))
         
@@ -1142,12 +1001,11 @@ class set_f(ez):
         if bed_feedback:
             self.z = self.z_update(periodic=True) 
 
-        if self.f>0:
-            ## Random entrainment by fluid:
-            if bed_feedback:
-                self.ep,self.z = self.f_entrain()
-            else:
-                self.ep, _ = self.f_entrain()
+        ## Random entrainment by fluid:
+        if bed_feedback:
+            self.ep,self.z = self.f_entrain()
+        else:
+            self.ep, _ = self.f_entrain()
         
         ## Avalanches:
         self.ep,self.z = self.a_entrain()
@@ -1178,15 +1036,7 @@ class set_f(ez):
             p_temp += self.c_calc(rollx,-1,periodic=True)*np.roll(np.roll(etemp,-1,axis=0),rollx,axis = 1)
         
         # Include fluid feedback:
-        p_temp = p_temp*(1-self.fb*self.e)*self.c_0
-        
-        # If water_h not nan, then apply water height dependence:
-        if ~np.isnan(self.water_h):
-            depth = (self.build_bed(self.slope)+self.water_h - self.z)
-            depth[depth<0]=0.0
-        else:
-            depth = 1.0
-        p_temp *= depth
+        p_temp = p_temp*self.c_0*self.u**2
         
         # Make sure p = 1 is the max value.
         p_temp[p_temp>1]=1.0
@@ -1195,3 +1045,162 @@ class set_f(ez):
         p_temp *= self.mask
                 
         return p_temp
+
+    ###########################
+    # Calculate Flow velocity #
+    ###########################    
+    def u_calc(self):
+        """
+        Takes the current bed, performs an x-average (accounting for mean slope), and solves the 1D BVP:
+
+        nu_t dy(dy(u)) = - g slope_x depth + (1 + dy(depth)^2) alpha(e) u
+
+        where u is the depth-averaged flow, nu_t is the turbulent viscosity, and alpha is the 'closure' relating the entrainment field (averaged in x) to a friction. 
+
+        returns u
+        """        
+        # Copy of arrays of interest, with potential masking
+        if self.mask_index==None:
+            mask_index=0
+        else:
+            mask_index=self.mask_index
+            
+        # Calculate depth:
+        depth_m_full = (self.build_bed(self.slope)[mask_index:self.Ny-mask_index,:]+self.water_h - self.z[mask_index:self.Ny-mask_index,:])
+        depth_m_full[depth_m_full<0]=0.0
+
+        # Then take the x-average of everything
+        D = np.mean(depth_m_full,axis=1)
+        ep_temp = np.mean(self.ep[mask_index:self.Ny-mask_index,:],axis=1)
+
+        ys = np.arange(len(D))
+        Dint = interp1d(ys,D)
+        Dpint = interp1d(ys,np.gradient(D))
+        epint = interp1d(ys,ep_temp)
+
+        if self.nu_t>0:
+            def fun(y,u):
+                # return np.vstack((u[1],-self.g*Dint(y)*self.slope/self.nu_t+self.alpha_0*(1+self.alpha_1*epint(y))/self.nu_t*u[0]))
+                return np.vstack((u[1],-self.g*Dint(y)*self.slope/self.nu_t+(1+Dpint(y)**2)*self.alpha_0*(1+self.alpha_1*epint(y))/self.nu_t*u[0]))
+            def bc(ua,ub):
+                return np.array([ua[0],ub[0]])
+            u_0 = np.zeros((2,ys.size))
+
+            u = solve_bvp(fun,bc,ys,u_0)
+
+            # Fill in and update full array
+            u_out = np.zeros(self.z.shape,dtype=float)
+
+            u_out[mask_index:self.Ny-mask_index,:] = np.tile(u.sol(ys)[0],(self.Nx,1)).T
+        else:
+            u_out = np.zeros(self.z.shape,dtype=float)
+            u_out[mask_index:self.Ny-mask_index,:] = np.tile((self.g*D*self.slope)/((1+(np.gradient(D))**2)*self.alpha_0*(1+self.alpha_1*ep_temp)),(self.Nx,1)).T
+
+        return u_out
+    
+    
+    ###############################
+    # Random entrainment by fluid #
+    ###############################
+    def f_entrain(self):
+        """
+        Entrains sites randomly due to fluid perturbation. Input: velocity (u), critical velocity (u_c), and width of transition (u_sig), output: self.ep, self.z.
+        """
+        
+        # Compute probability of entrainment based on erf entrainment function  
+        p_temp = 0.5*(1+erf((self.u-self.u_c)/(np.sqrt(2)*self.u_sig)))
+        
+        # Apply mask:
+        p_temp *= self.mask 
+                
+        # Copy of arrays of interest
+        ep_temp = np.copy(self.ep)
+        z_temp = np.copy(self.z)
+                
+        #Generate random numbers between zero and one for the whole domain
+        rndc = self.rng.uniform(0.0, 1.0,size=(self.Ny,self.Nx))
+        
+        # In places where p > rndc, entrainments happen.
+        ep_temp[rndc<=p_temp] = True
+
+        # Subtract from places upstream of where we found them entrained.
+        ys,xs = np.where(ep_temp ^ self.ep)
+#         dxs = self.dx_mat[ys,xs] 
+        dxs = self.skipmax # Advecting with mean flow just to avoid overlaps
+        xs = (xs-dxs)%self.Nx
+        
+        z_temp[ys,xs] -=  1/self.zfactor
+        
+        return ep_temp,z_temp
+    
+    ###############
+    # Avalanching #
+    ###############
+    def a_entrain(self):
+        """
+        Entrains sites due to avalanching. Uses: mu_c, u_0, g_0, self.z, output: updated versions of self.ep, self.z.
+        """    
+        # Copy of arrays of interest, with potential masking
+        if self.mask_index==None:
+            mask_index=0
+        else:
+            mask_index=self.mask_index
+            
+        ep_temp = np.copy(self.ep[mask_index:self.Ny-mask_index,:])
+        z_temp = np.copy(self.z[mask_index:self.Ny-mask_index,:])
+
+        # Calculate depth (to be used in entrainment condition):
+        depth = (self.build_bed(self.slope)[mask_index:self.Ny-mask_index,:]+self.water_h - z_temp)
+        depth[depth<0]=0.0
+        
+        # Finally, apply avalanche condition
+        slope_y = np.gradient(z_temp,axis=0)
+        mu = ((self.u_0*self.u[mask_index:self.Ny-mask_index,:])**4 + (self.g_0*slope_y)**2)**(0.5)
+        
+        # Entrain grains with the smallest depths
+        depths = np.unique(list(sorted((depth*(mu>self.mu_c)).flatten())))
+        depths = depths[depths>0]
+        if (len(depths)>0):
+            inds_max = 0
+            for d in depths:
+                inds_max += len(np.argwhere(depth==d))
+            num = min([10,inds_max])
+            ii = 0 
+            count = 0
+            while count<num:
+                inds = np.argwhere(depth==depths[ii])
+                choose = np.min([len(inds),(num-count)])
+                inds_rand = self.rng.choice(inds,choose,replace=False)
+                ys,xs = inds_rand.T
+                ep_temp[ys,xs]=True
+                ii+=1
+                count+=choose
+
+        # Subtract from places upstream of where we found them entrained.
+        ys,xs = np.where(ep_temp ^ self.ep[mask_index:self.Ny-mask_index,:])
+
+        z_temp[ys,xs] -=  1/self.zfactor
+
+        # Fill in and update full array
+        ep_out = np.copy(self.ep)
+        z_out = np.copy(self.z)
+        
+        ep_out[mask_index:self.Ny-mask_index,:] = ep_temp
+        z_out[mask_index:self.Ny-mask_index,:] = z_temp
+        
+        return ep_out,z_out
+    
+    ##########
+    # Extras #
+    ##########
+    
+    def export_name(self):
+        c0str = str(self.c_0).replace(".", "d")
+        slope = str(self.slope).replace(".", "d")
+        return 'ez_data_Nx_set_f_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_c_0_'+c0str+'_slope_'+slope+str(date.today())
+
+    def get_params(self):
+        """
+        Get parameters of model: returns [Nx,Ny,c_0,u_0,u_c,u_sig,alpha_0,nu_t,skipmax,initial,slope,zfactor,bed_h,mask_index,g_0,mu_c,water_h,alpha_1]
+        """
+        return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'u_0':self.u_0,'u_c':self.u_c,'u_sig':self.u_sig,'alpha_0':self.alpha_0,'nu_t':self.nu_t,'skipmax':self.skipmax,'initial':self.initial,'slope':self.slope,'zfactor':self.zfactor,'bed_h':self.bed_h,'mask_index':self.mask_index,'g_0':self.g_0,'mu_c':self.mu_c,'water_h':self.water_h,'alpha_1':self.alpha_1}
