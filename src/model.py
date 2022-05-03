@@ -977,9 +977,9 @@ class set_f(ez):
         ## Copies and auxiliary entrainment matrix
         self.e = np.copy(self.ep)    
         
-        if (self.tstep%10)==0:
-            ## Flow velocity:
-            self.u = self.u_calc()
+        # if (self.tstep%10)==0:
+        ## Flow velocity:
+        self.u = self.u_calc()
         
         if bal:        
             temp = np.sum(self.e)+np.int(np.round(np.sum(self.z)*self.zfactor))
@@ -1156,10 +1156,12 @@ class set_f(ez):
         
         # Finally, apply avalanche condition
         slope_y = np.gradient(z_temp,axis=0)
+        curve_y = np.gradient(slope_y,axis=0)
         mu = ((self.u_0*self.u[mask_index:self.Ny-mask_index,:])**4 + (self.g_0*slope_y)**2)**(0.5)
         
         # Possible locations of entrainment:
-        inds = np.argwhere(((mu>self.mu_c) ^ self.ep[mask_index:self.Ny-mask_index,:])*(mu>self.mu_c))
+        # To avoid runaway affects, we won't entrain locations with positive curvature (i.e. places that are local minima)
+        inds = np.argwhere(((mu>self.mu_c) ^ self.ep[mask_index:self.Ny-mask_index,:])*(mu>self.mu_c)*(curve_y<=.1))
         # Choose 10 or fewer
         choose = np.min([len(inds),10])
         inds_rand = self.rng.choice(inds,choose,replace=False)
