@@ -20,7 +20,7 @@ class ez():
         ----------
         Nx: number of gridpoints in x-direction. One gridpoint represents a grain diameter. 
         Ny: number of gridpoints in y-direction. One gridpoint represents a grain diameter. 
-        c_0: prefactor to the probability of entrainment given an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). Typical values to use depend on what mode you are using (see set_f or set_q).
+        c_0: prefactor to the probability of entrainment givdddden an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). Typical values to use depend on what mode you are using (see set_f or set_q).
         
         Optional parameters:
         skipmax: (average) hop length in units of grain diameters. Hop lengths are binomially distributed with a mean of skipmax. (See dx_calc function). Set to 3 by default
@@ -248,11 +248,9 @@ class ez():
         """
         # Calculate the bed slope:
         xs = np.arange(-rollx,self.Nx)
-        bed = np.mean(self.build_bed(self.slope),axis=0)
-
-        # The true bed is now from 1+rollx to Nx in bed_f
-        m,b = np.polyfit(xs[int(self.Nx/4)+rollx:-int(self.Nx/4)],bed[int(self.Nx/4):-int(self.Nx/4)],1)
-        bed_f = np.array(m*xs+b,dtype=float)
+        bed_f = np.zeros(xs.shape[0])
+        bed_f[rollx:] = np.copy(np.mean(self.build_bed(self.slope),axis=0))
+        bed_f[:rollx] = bed_f[rollx]+self.slope*np.flip(np.arange(1,rollx+1))
         
         # Calculate the pertrusion from the fit
         z_diff = self.z[:,-rollx:]-bed_f[-rollx:]
@@ -269,10 +267,7 @@ class ez():
         """
         Builds a bed with a slope="slope" (input parameter). Returns z_temp, doesn't redefine self.z.
         """
-        z_temp = np.copy(self.z)
-        
-        for i in range(self.Ny):
-            z_temp[i,:] = slope*(self.Nx-np.arange(self.Nx)-1) + self.bed_h
+        z_temp = np.tile(slope*(self.Nx-np.arange(self.Nx)-1) + self.bed_h,(self.Ny,1))
 
         return z_temp
 
@@ -892,7 +887,7 @@ class set_q(ez):
         c0str = str(self.c_0).replace(".", "d")
         fstr = str(self.f).replace(".", "d")
         qstr = str(self.q_in).replace(".", "d")
-        return 'ez_data_Nx_set_q_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_c_0_'+c0str+'_f_'+fstr+'_q_in_'+qstr+str(date.today())
+        return 'ez_data_Nx_set_q_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_c_0_'+c0str+'_f_'+fstr+'_q_in_'+qstr+'_'+str(date.today())
 
     def get_params(self):
         """
@@ -982,8 +977,9 @@ class set_f(ez):
         ## Copies and auxiliary entrainment matrix
         self.e = np.copy(self.ep)    
         
-        ## Flow velocity:
-        self.u = self.u_calc()
+        if (self.tstep%10)==0:
+            ## Flow velocity:
+            self.u = self.u_calc()
         
         if bal:        
             temp = np.sum(self.e)+np.int(np.round(np.sum(self.z)*self.zfactor))
@@ -1163,12 +1159,12 @@ class set_f(ez):
         if (len(depths)>0):
             inds_max = 0
             for d in depths:
-                inds_max += len(np.argwhere(depth==d))
+                inds_max += len(np.argwhere(depth*(mu>self.mu_c)==d))
             num = min([10,inds_max])
             ii = 0 
             count = 0
             while count<num:
-                inds = np.argwhere(depth==depths[ii])
+                inds = np.argwhere(depth*(mu>self.mu_c)==depths[ii])
                 choose = np.min([len(inds),(num-count)])
                 inds_rand = self.rng.choice(inds,choose,replace=False)
                 ys,xs = inds_rand.T
@@ -1197,7 +1193,7 @@ class set_f(ez):
     def export_name(self):
         c0str = str(self.c_0).replace(".", "d")
         slope = str(self.slope).replace(".", "d")
-        return 'ez_data_Nx_set_f_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_c_0_'+c0str+'_slope_'+slope+str(date.today())
+        return 'ez_data_Nx_set_f_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_c_0_'+c0str+'_slope_'+slope+'_'+str(date.today())
 
     def get_params(self):
         """
