@@ -997,14 +997,18 @@ class set_f(ez):
         if bed_feedback:
             self.z = self.z_update(periodic=True) 
 
-        ## Random entrainment by fluid:
         if bed_feedback:
-            self.ep,self.z = self.f_entrain()
+            ## Random entrainment by fluid:
+            self.ep,self.z = self.f_entrain()        
+            ## Avalanches:
+            self.ep,self.z = self.a_entrain()
         else:
-            self.ep, _ = self.f_entrain()
+            ## Random entrainment by fluid:
+            self.ep, _ = self.f_entrain()        
+            ## Avalanches:
+            self.ep, _ = self.a_entrain()
         
-        ## Avalanches:
-        self.ep,self.z = self.a_entrain()
+
                 
         ## Add to time:
         self.tstep += 1
@@ -1143,6 +1147,7 @@ class set_f(ez):
             mask_index=self.mask_index
             
         ep_temp = np.copy(self.ep[mask_index:self.Ny-mask_index,:])
+        # ep_temp_2 = np.copy(self.ep[mask_index:self.Ny-mask_index,:])
         z_temp = np.copy(self.z[mask_index:self.Ny-mask_index,:])
 
         # Calculate depth (to be used in entrainment condition):
@@ -1153,29 +1158,41 @@ class set_f(ez):
         slope_y = np.gradient(z_temp,axis=0)
         mu = ((self.u_0*self.u[mask_index:self.Ny-mask_index,:])**4 + (self.g_0*slope_y)**2)**(0.5)
         
-        # Entrain grains with the smallest depths
-        depths = np.unique(list(sorted((depth*(mu>self.mu_c)).flatten())))
-        depths = depths[depths>0]
-        if (len(depths)>0):
-            inds_max = 0
-            for d in depths:
-                inds_max += len(np.argwhere(depth*(mu>self.mu_c)==d))
-            num = min([10,inds_max])
-            ii = 0 
-            count = 0
-            while count<num:
-                inds = np.argwhere(depth*(mu>self.mu_c)==depths[ii])
-                choose = np.min([len(inds),(num-count)])
-                inds_rand = self.rng.choice(inds,choose,replace=False)
-                ys,xs = inds_rand.T
-                ep_temp[ys,xs]=True
-                ii+=1
-                count+=choose
-
-        # Subtract from places upstream of where we found them entrained.
-        ys,xs = np.where(ep_temp ^ self.ep[mask_index:self.Ny-mask_index,:])
-
-        z_temp[ys,xs] -=  1/self.zfactor
+        # Possible locations of entrainment:
+        inds = np.argwhere(((mu>self.mu_c) ^ self.ep[mask_index:self.Ny-mask_index,:])*(mu>self.mu_c))
+        # Choose 10 or fewer
+        choose = np.min([len(inds),10])
+        inds_rand = self.rng.choice(inds,choose,replace=False)
+        ys,xs = inds_rand.T
+        if len(ys)>0:
+            ep_temp[ys,xs] = True
+            z_temp[ys,xs] -= 1/self.zfactor
+        
+        # # Entrain grains with the smallest depths
+        # depths = np.unique(list(sorted((depth*(mu>self.mu_c)).flatten())))
+        # depths = depths[depths>0]
+        # if (len(depths)>0):
+        #     inds_max = 0
+        #     for d in depths:
+        #         inds_max += len(np.argwhere(depth*(mu>self.mu_c)==d))
+        #     num = min([10,inds_max])
+        #     ii = 0 
+        #     count = 0
+        #     while count<num:
+        #         inds = np.argwhere(depth*(mu>self.mu_c)==depths[ii])
+        #         choose = np.min([len(inds),(num-count)])
+        #         inds_rand = self.rng.choice(inds,choose,replace=False)
+        #         ys,xs = inds_rand.T
+        #         ep_temp_2[ys,xs]=True
+        #         # Only keep those locations which were previously unentrained.
+        #         ys,xs = np.where((ep_temp_2 ^ self.ep[mask_index:self.Ny-mask_index,:])*ep_temp_2)
+        #         if len(ys)>0:
+        #             ep_temp[ys,xs] = True
+        #             z_temp[ys,xs] -= 1/self.zfactor
+        #         # Reset ep_temp_2
+        #         ep_temp_2 = np.copy(self.ep[mask_index:self.Ny-mask_index,:])
+        #         ii+=1
+        #         count+=choose
 
         # Fill in and update full array
         ep_out = np.copy(self.ep)
