@@ -998,8 +998,8 @@ class set_f(ez):
             self.z = self.z_update(periodic=True) 
 
         if bed_feedback:
-            # ## Random entrainment by fluid:
-            # self.ep,self.z = self.f_entrain()        
+            ## Random entrainment by fluid:
+            self.ep,self.z = self.f_entrain()        
             ## Avalanches:
             self.ep,self.z = self.a_entrain()
         else:
@@ -1153,15 +1153,17 @@ class set_f(ez):
         # Calculate depth (to be used in entrainment condition):
         depth = (self.build_bed(self.slope)[mask_index:self.Ny-mask_index,:]+self.water_h - z_temp)
         depth[depth<0]=0.0
-        
+
         # Finally, apply avalanche condition
-        slope_y = np.gradient(z_temp,axis=0)
+        slope_y = np.gradient(np.mean(z_temp,axis=1),axis=0)
         curve_y = np.gradient(slope_y,axis=0)
-        mu = ((self.u_0*self.u[mask_index:self.Ny-mask_index,:])**4 + (self.g_0*slope_y)**2)**(0.5)
-        
+        mu = ((self.u_0*np.mean(self.u[mask_index:self.Ny-mask_index,:],axis=1))**4 + (self.g_0*slope_y)**2)**(0.5)
+        # Tile mu:
+        mu = np.tile(mu,(self.Nx,1)).T
+
         # Possible locations of entrainment:
         # To avoid runaway affects, we won't entrain locations with positive curvature (i.e. places that are local minima)
-        inds = np.argwhere(((mu>self.mu_c) ^ self.ep[mask_index:self.Ny-mask_index,:])*(mu>self.mu_c)*(curve_y<=.1))
+        inds = np.argwhere(((mu>self.mu_c) ^ self.ep[mask_index:self.Ny-mask_index,:])*(mu>self.mu_c))
         # To avoid runaway, only avalanche whenever there are 10 or more
         if (len(inds)>=10):
             inds_rand = self.rng.choice(inds,10,replace=False)
@@ -1169,6 +1171,22 @@ class set_f(ez):
             if len(ys)>0:
                 ep_temp[ys,xs] = True
                 z_temp[ys,xs] -= 1/self.zfactor
+        
+#         # Finally, apply avalanche condition
+#         slope_y = np.gradient(z_temp,axis=0)
+#         curve_y = np.gradient(slope_y,axis=0)
+#         mu = ((self.u_0*self.u[mask_index:self.Ny-mask_index,:])**4 + (self.g_0*slope_y)**2)**(0.5)
+        
+#         # Possible locations of entrainment:
+#         # To avoid runaway affects, we won't entrain locations with positive curvature (i.e. places that are local minima)
+#         inds = np.argwhere(((mu>self.mu_c) ^ self.ep[mask_index:self.Ny-mask_index,:])*(mu>self.mu_c)*(curve_y<=.1))
+#         # To avoid runaway, only avalanche whenever there are 10 or more
+#         if (len(inds)>=10):
+#             inds_rand = self.rng.choice(inds,10,replace=False)
+#             ys,xs = inds_rand.T
+#             if len(ys)>0:
+#                 ep_temp[ys,xs] = True
+#                 z_temp[ys,xs] -= 1/self.zfactor
         
         # # Entrain grains with the smallest depths
         # depths = np.unique(list(sorted((depth*(mu>self.mu_c)).flatten())))
