@@ -1171,48 +1171,6 @@ class set_f(ez):
             if len(ys)>0:
                 ep_temp[ys,xs] = True
                 z_temp[ys,xs] -= 1/self.zfactor
-        
-#         # Finally, apply avalanche condition
-#         slope_y = np.gradient(z_temp,axis=0)
-#         curve_y = np.gradient(slope_y,axis=0)
-#         mu = ((self.u_0*self.u[mask_index:self.Ny-mask_index,:])**4 + (self.g_0*slope_y)**2)**(0.5)
-        
-#         # Possible locations of entrainment:
-#         # To avoid runaway affects, we won't entrain locations with positive curvature (i.e. places that are local minima)
-#         inds = np.argwhere(((mu>self.mu_c) ^ self.ep[mask_index:self.Ny-mask_index,:])*(mu>self.mu_c)*(curve_y<=.1))
-#         # To avoid runaway, only avalanche whenever there are 10 or more
-#         if (len(inds)>=10):
-#             inds_rand = self.rng.choice(inds,10,replace=False)
-#             ys,xs = inds_rand.T
-#             if len(ys)>0:
-#                 ep_temp[ys,xs] = True
-#                 z_temp[ys,xs] -= 1/self.zfactor
-        
-        # # Entrain grains with the smallest depths
-        # depths = np.unique(list(sorted((depth*(mu>self.mu_c)).flatten())))
-        # depths = depths[depths>0]
-        # if (len(depths)>0):
-        #     inds_max = 0
-        #     for d in depths:
-        #         inds_max += len(np.argwhere(depth*(mu>self.mu_c)==d))
-        #     num = min([10,inds_max])
-        #     ii = 0 
-        #     count = 0
-        #     while count<num:
-        #         inds = np.argwhere(depth*(mu>self.mu_c)==depths[ii])
-        #         choose = np.min([len(inds),(num-count)])
-        #         inds_rand = self.rng.choice(inds,choose,replace=False)
-        #         ys,xs = inds_rand.T
-        #         ep_temp_2[ys,xs]=True
-        #         # Only keep those locations which were previously unentrained.
-        #         ys,xs = np.where((ep_temp_2 ^ self.ep[mask_index:self.Ny-mask_index,:])*ep_temp_2)
-        #         if len(ys)>0:
-        #             ep_temp[ys,xs] = True
-        #             z_temp[ys,xs] -= 1/self.zfactor
-        #         # Reset ep_temp_2
-        #         ep_temp_2 = np.copy(self.ep[mask_index:self.Ny-mask_index,:])
-        #         ii+=1
-        #         count+=choose
 
         # Fill in and update full array
         ep_out = np.copy(self.ep)
