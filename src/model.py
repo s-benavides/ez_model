@@ -1059,12 +1059,14 @@ class set_f(ez):
 
         returns u
         """        
+        u_out = np.zeros(self.z.shape,dtype=float)
+
         # Copy of arrays of interest, with potential masking
         if self.mask_index==None:
             mask_index=0
         else:
             mask_index=self.mask_index
-            
+
         # Calculate depth:
         depth_m_full = (self.build_bed(self.slope)[mask_index:self.Ny-mask_index,:]+self.water_h - self.z[mask_index:self.Ny-mask_index,:])
         depth_m_full[depth_m_full<0]=0.0
@@ -1073,28 +1075,35 @@ class set_f(ez):
         D = np.mean(depth_m_full,axis=1)
         ep_temp = np.mean(self.ep[mask_index:self.Ny-mask_index,:],axis=1)
 
-        ys = np.arange(len(D))
-        Dint = interp1d(ys,D)
-        Dpint = interp1d(ys,np.gradient(D))
-        epint = interp1d(ys,ep_temp)
+        # Indices for filling uout back in.
+        try:
+            il = np.where(D>0)[0][0]
+        except:
+            print("Depth = 0 everywhere")
+            
+        # Only solve for the flow in the region that has depth>0
+        ep_temp = ep_temp[D>0]
+        D = D[D>0]
 
-        if self.nu_t>0:
-            def fun(y,u):
-                # return np.vstack((u[1],-self.g*Dint(y)*self.slope/self.nu_t+self.alpha_0*(1+self.alpha_1*epint(y))/self.nu_t*u[0]))
-                return np.vstack((u[1],-self.g*Dint(y)*self.slope/self.nu_t+(1+Dpint(y)**2)*self.alpha_0*(1+self.alpha_1*epint(y))/self.nu_t*u[0]))
-            def bc(ua,ub):
-                return np.array([ua[0],ub[0]])
-            u_0 = np.zeros((2,ys.size))
+        if len(D)>0:
+            ys = np.arange(len(D))
+            Dint = interp1d(ys,D)
+            Dpint = interp1d(ys,np.gradient(D))
+            epint = interp1d(ys,ep_temp)
 
-            u = solve_bvp(fun,bc,ys,u_0)
+            if self.nu_t>0:
+                def fun(y,u):
+                    # return np.vstack((u[1],-self.g*Dint(y)*self.slope/self.nu_t+self.alpha_0*(1+self.alpha_1*epint(y))/self.nu_t*u[0]))
+                    return np.vstack((u[1],-self.g*Dint(y)*self.slope/self.nu_t+(1+Dpint(y)**2)*self.alpha_0*(1+self.alpha_1*epint(y))/self.nu_t*u[0]))
+                def bc(ua,ub):
+                    return np.array([ua[0],ub[0]])
+                u_0 = np.zeros((2,ys.size))
 
-            # Fill in and update full array
-            u_out = np.zeros(self.z.shape,dtype=float)
+                u = solve_bvp(fun,bc,ys,u_0)
 
-            u_out[mask_index:self.Ny-mask_index,:] = np.tile(u.sol(ys)[0],(self.Nx,1)).T
-        else:
-            u_out = np.zeros(self.z.shape,dtype=float)
-            u_out[mask_index:self.Ny-mask_index,:] = np.tile((self.g*D*self.slope)/((1+(np.gradient(D))**2)*self.alpha_0*(1+self.alpha_1*ep_temp)),(self.Nx,1)).T
+                u_out[mask_index+il:mask_index + il + len(D),:] = np.tile(u.sol(ys)[0],(self.Nx,1)).T
+            else:
+                u_out[mask_index+il:mask_index + il + len(D),:] = np.tile((self.g*D*self.slope)/((1+(np.gradient(D))**2)*self.alpha_0*(1+self.alpha_1*ep_temp)),(self.Nx,1)).T
 
         return u_out
     
