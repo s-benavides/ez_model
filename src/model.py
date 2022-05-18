@@ -3,7 +3,7 @@ ez superclass
 """
 import numpy as np
 import tqdm
-import h5py
+# import h5py
 from os import path
 import random
 from scipy.integrate import solve_bvp
@@ -1159,23 +1159,31 @@ class set_f(ez):
         # ep_temp_2 = np.copy(self.ep[mask_index:self.Ny-mask_index,:])
         z_temp = np.copy(self.z[mask_index:self.Ny-mask_index,:])
 
-        # Calculate depth (to be used in entrainment condition):
-        depth = (self.build_bed(self.slope)[mask_index:self.Ny-mask_index,:]+self.water_h - z_temp)
-        depth[depth<0]=0.0
-
         # Finally, apply avalanche condition
         slope_y = np.gradient(np.mean(z_temp,axis=1),axis=0)
         curve_y = np.gradient(slope_y,axis=0)
         mu = ((self.u_0*np.mean(self.u[mask_index:self.Ny-mask_index,:],axis=1))**4 + (self.g_0*slope_y)**2)**(0.5)
+
+        # Entrain grains with the smallest depths
+        # Calculate depth (to be used in entrainment condition):
+        depth = (self.build_bed(self.slope)[mask_index:self.Ny-mask_index,:]+self.water_h - z_temp)
+        depth[depth<0]=0.0
+        depths = np.unique(list(sorted((np.mean(depth,axis=1)*(mu>self.mu_c)).flatten())))
+        # depths = depths[depths>0]
+
         # Tile mu:
         mu = np.tile(mu,(self.Nx,1)).T
 
         # Possible locations of entrainment:
-        # To avoid runaway affects, we won't entrain locations with positive curvature (i.e. places that are local minima)
-        inds = np.argwhere(((mu>self.mu_c) ^ self.ep[mask_index:self.Ny-mask_index,:])*(mu>self.mu_c))
-        # To avoid runaway, only avalanche whenever there are 10 or more
-        if (len(inds)>=10):
-            inds_rand = self.rng.choice(inds,10,replace=False)
+        # Condition: (1) mu>mu_c (2) not currently entrained (3) choosing rows that have a depth lower than the second smallest average depth.
+        if len(depths)>0:
+            nn = np.min([len(depths)-1,1])
+            inds = np.argwhere(((mu>self.mu_c) ^ self.ep[mask_index:self.Ny-mask_index,:])*(mu>self.mu_c)*(depth<depths[nn]))
+            # To avoid runaway, only avalanche whenever there are 10 or more
+            if (len(inds)>=10):
+                inds_rand = self.rng.choice(inds,10,replace=False)
+            else:
+                inds_rand = self.rng.choice(inds,len(inds),replace=False)
             ys,xs = inds_rand.T
             if len(ys)>0:
                 ep_temp[ys,xs] = True
