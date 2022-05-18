@@ -310,7 +310,7 @@ class ez():
 
         return 
 
-    def export_state(self,odir,overwrite=True):
+    def export_state(self,odir,today=date.today(),overwrite=True):
         """
         Inputs: name (name of file), odir (output directory), overwrite (=True by default), if True, then regardless 
         of if there is already a file there or not, it'll overwrite that file. Otherwise, it'll append to the 
@@ -322,7 +322,7 @@ class ez():
             2) 'state' [tstep,z,ep,p]
         into directory 'odir'.
         """
-        fname = odir+ self.export_name() +'_state.h5'
+        fname = odir+ self.export_name(today) +'_state.h5'
         if not path.exists(fname):
             with h5py.File(fname,'w') as f:
                 # Parameters
@@ -370,7 +370,7 @@ class ez():
 
         return
 
-    def export_scalars(self,odir,data,overwrite=True):
+    def export_scalars(self,odir,data,today=date.today(),overwrite=True):
         """
         Inputs: 
          - odir (output directory)
@@ -384,7 +384,7 @@ class ez():
             2) 'scalars' (depends on the mode) 
         into directory 'odir'.
         """
-        fname = odir+ self.export_name() +'_scalars.h5'
+        fname = odir+ self.export_name(today) +'_scalars.h5'
         if not path.exists(fname):
             with h5py.File(fname,'w') as f:
                 # Parameters
@@ -480,7 +480,7 @@ class ez():
         plt.show()
         return
         
-    def make_e_movie(self, t_steps, duration, odir,fps=24,name_add='',bed_feedback=True):
+    def make_e_movie(self, t_steps, duration, odir,today=date.today(),fps=24,name_add='',bed_feedback=True):
         """
         Makes movie of the entrainment field.
         Takes t_steps number of time-steps from *current* state and exports a movie in 'odir' directory that is a maximum of 'duration' seconds long. 
@@ -558,12 +558,12 @@ class ez():
 
         # Try to set the DPI to the actual number of pixels you're plotting
         writer = FFMpegWriter(fps=fps, metadata=dict(artist='Me'), bitrate=1800)
-        name = odir+self.export_name()+name_add+'_e.mp4'
+        name = odir+self.export_name(today)+name_add+'_e.mp4'
         sim.save(name, dpi=300, writer=writer)
 
         return
 
-    def make_panel_movie(self, t_steps, duration, odir,fps=24,name_add='',bed_feedback=True):
+    def make_panel_movie(self, t_steps, duration, odir,today=date.today(),fps=24,name_add='',bed_feedback=True):
         """
         Makes movie of entrainment field, y-averaged height, and bed activity. Note that the entrainment field's aspect ratio will be adjusted to fit.
         Takes t_steps number of time-steps from *current* state and exports a movie in 'odir' directory that is a maximum of 'duration' seconds long. 
@@ -662,7 +662,7 @@ class ez():
 
         # Try to set the DPI to the actual number of pixels you're plotting
         writer = FFMpegWriter(fps=fps, metadata=dict(artist='Me'), bitrate=1800)
-        name = odir+self.export_name()+name_add+'_panel.mp4'
+        name = odir+self.export_name(today)+name_add+'_panel.mp4'
         sim.save(name, dpi=300, writer=writer)
 
         return
@@ -883,11 +883,11 @@ class set_q(ez):
     # Extras #
     ##########
     
-    def export_name(self):
+    def export_name(self,today):
         c0str = str(self.c_0).replace(".", "d")
         fstr = str(self.f).replace(".", "d")
         qstr = str(self.q_in).replace(".", "d")
-        return 'ez_data_Nx_set_q_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_c_0_'+c0str+'_f_'+fstr+'_q_in_'+qstr+'_'+str(date.today())
+        return 'ez_data_Nx_set_q_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_c_0_'+c0str+'_f_'+fstr+'_q_in_'+qstr+'_'+str(today)
 
     def get_params(self):
         """
@@ -1194,10 +1194,10 @@ class set_f(ez):
     # Extras #
     ##########
     
-    def export_name(self):
+    def export_name(self,today):
         c0str = str(self.c_0).replace(".", "d")
         slope = str(self.slope).replace(".", "d")
-        return 'ez_data_Nx_set_f_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_c_0_'+c0str+'_slope_'+slope+'_'+str(date.today())
+        return 'ez_data_Nx_set_f_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_c_0_'+c0str+'_slope_'+slope+'_'+str(today)
 
     def get_params(self):
         """
