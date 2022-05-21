@@ -3,7 +3,7 @@ ez superclass
 """
 import numpy as np
 import tqdm
-# import h5py
+import h5py
 from os import path
 import random
 from scipy.integrate import solve_bvp
