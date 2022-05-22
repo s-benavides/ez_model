@@ -3,7 +3,7 @@ ez superclass
 """
 import numpy as np
 import tqdm
-# import h5py
+import h5py
 from os import path
 import random
 from scipy.integrate import solve_bvp
@@ -1154,40 +1154,50 @@ class set_f(ez):
             mask_index=0
         else:
             mask_index=self.mask_index
-            
+
         ep_temp = np.copy(self.ep[mask_index:self.Ny-mask_index,:])
-        # ep_temp_2 = np.copy(self.ep[mask_index:self.Ny-mask_index,:])
         z_temp = np.copy(self.z[mask_index:self.Ny-mask_index,:])
 
         # Finally, apply avalanche condition
-        slope_y = np.gradient(np.mean(z_temp,axis=1),axis=0)
-        curve_y = np.gradient(slope_y,axis=0)
-        mu = ((self.u_0*np.mean(self.u[mask_index:self.Ny-mask_index,:],axis=1))**4 + (self.g_0*slope_y)**2)**(0.5)
+        slope_y = np.zeros(z_temp[:,0].shape)
+        # Forward slope calculation in first half:
+        slope_y[:int(self.Ny/2-mask_index)] = np.diff(np.mean(z_temp,axis=1),axis=0)[:int(self.Ny/2-mask_index)]
+        # Backward slope calculation in second half:
+        slope_y[int(self.Ny/2-mask_index):] = np.flip(np.diff(np.flip(np.mean(z_temp,axis=1)),axis=0))[int(self.Ny/2-mask_index)-1:] # Making sure to shift because diff is a different shape
 
-        # Entrain grains with the smallest depths
-        # Calculate depth (to be used in entrainment condition):
+        mu = ((self.u_0*np.mean(self.u[mask_index:self.Ny-mask_index,:],axis=1))**4 + (self.g_0*slope_y)**2)**(0.5)
+        
+        # Entrain y-locations with mu>mu_c and which have the smallest mean depth values
+        # First calculate mean depth
         depth = (self.build_bed(self.slope)[mask_index:self.Ny-mask_index,:]+self.water_h - z_temp)
         depth[depth<0]=0.0
-        depths = np.unique(list(sorted((np.mean(depth,axis=1)*(mu>self.mu_c)).flatten())))
-        # depths = depths[depths>0]
+        mean_d = np.mean(depth,axis=1)
 
-        # Tile mu:
-        mu = np.tile(mu,(self.Nx,1)).T
+        # Now find y-locations for entrainment
+        ent = mean_d*(mu>self.mu_c)
+        ent[ent==0]=np.nan
+        # Left half:
+        if np.any(~np.isnan(ent[:int(self.Ny/2-mask_index)])):
+            # Min depth on the left:
+            ys_l = np.nanargmin(ent[:int(self.Ny/2-mask_index)])
 
-        # Possible locations of entrainment:
-        # Condition: (1) mu>mu_c (2) not currently entrained (3) choosing rows that have a depth lower than the second smallest average depth.
-        if len(depths)>0:
-            nn = np.min([len(depths)-1,1])
-            inds = np.argwhere(((mu>self.mu_c) ^ self.ep[mask_index:self.Ny-mask_index,:])*(mu>self.mu_c)*(depth<depths[nn]))
-            # To avoid runaway, only avalanche whenever there are 10 or more
-            if (len(inds)>=10):
-                inds_rand = self.rng.choice(inds,10,replace=False)
-            else:
-                inds_rand = self.rng.choice(inds,len(inds),replace=False)
-            ys,xs = inds_rand.T
-            if len(ys)>0:
-                ep_temp[ys,xs] = True
-                z_temp[ys,xs] -= 1/self.zfactor
+            # Now entrain 5 random grains in these locations
+            inds_x = np.where(~ep_temp[ys_l,:])[0]
+            xs_l = self.rng.choice(inds_x,np.min([5,len(inds_x)]),replace=False)
+            ep_temp[ys_l,xs_l] = True
+            z_temp[ys_l,xs_l] -= 1/self.zfactor
+
+        # Right half
+        if np.any(~np.isnan(ent[int(self.Ny/2-mask_index):])):
+            # Min depth on the right:
+            ys_r = np.nanargmin(ent[int(self.Ny/2-mask_index):])
+            ys_r += int(self.Ny/2-mask_index)
+
+            # Now entrain 5 random grains in these locations
+            inds_x = np.where(~ep_temp[ys_r,:])[0]
+            xs_r = self.rng.choice(inds_x,np.min([5,len(inds_x)]),replace=False)
+            ep_temp[ys_r,xs_r] = True
+            z_temp[ys_r,xs_r] -= 1/self.zfactor
 
         # Fill in and update full array
         ep_out = np.copy(self.ep)
