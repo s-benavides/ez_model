@@ -1121,7 +1121,20 @@ class set_f(ez):
         
         # Apply mask:
         p_temp *= self.mask 
-                
+        
+        # Don't entrain randomly in places where the depth is = 0
+        # Copy of arrays of interest, with potential masking
+        if self.mask_index==None:
+            mask_index=0
+        else:
+            mask_index=self.mask_index
+
+        # Calculate depth:
+        depth_m_full = (self.build_bed(self.slope)[mask_index:self.Ny-mask_index,:]+self.water_h - self.z[mask_index:self.Ny-mask_index,:])
+        depth_m_full[depth_m_full<0]=0.0
+        
+        p_temp *= (depth_m_full>0)
+        
         # Copy of arrays of interest
         ep_temp = np.copy(self.ep)
         z_temp = np.copy(self.z)
