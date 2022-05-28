@@ -955,6 +955,10 @@ class set_f(ez):
         self.water_h = water_h
         self.alpha_1 = alpha_1
         
+        # Wait until the first step to initialize. For now set to zero. This is in case we only have a subdomain with depth > 0.
+        self.ep = np.zeros((self.Ny,self.Nx),dtype=bool)
+        self.e = np.zeros((self.Ny,self.Nx),dtype=bool)
+        
         ## Flow velocity:
         self.u = self.u_calc()        
         
@@ -973,7 +977,17 @@ class set_f(ez):
         bal (= False by default): returns sum of active grains and grains in the bed (times zfactor), to check grain number conservation.
         bed_feedback ( = True by default): if False, then the bed doesn't update and there is no feedback with the bed.
         """
+        # Initialize randomly on first time step (not done at initialization of ez in case a channel is set where the depth is zero in some region.
+        if self.step==0:
+            A = self.rng.random(size=(self.Ny,self.Nx))
+            self.ep = A<self.initial        
+            # Only initialize grains inside the flow domain
+            # Calculate depth:
+            depth_m_full = (self.build_bed(self.slope)+self.water_h - self.z)
+            depth_m_full[depth_m_full<0]=0.0
 
+            self.ep *= (depth_m_full>0)
+            
         ## Copies and auxiliary entrainment matrix
         self.e = np.copy(self.ep)    
         
