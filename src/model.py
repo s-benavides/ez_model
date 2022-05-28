@@ -978,7 +978,7 @@ class set_f(ez):
         bed_feedback ( = True by default): if False, then the bed doesn't update and there is no feedback with the bed.
         """
         # Initialize randomly on first time step (not done at initialization of ez in case a channel is set where the depth is zero in some region.
-        if self.step==0:
+        if self.tstep==0:
             A = self.rng.random(size=(self.Ny,self.Nx))
             self.ep = A<self.initial        
             # Only initialize grains inside the flow domain
