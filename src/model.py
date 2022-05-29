@@ -915,7 +915,7 @@ class set_f(ez):
         Nx: number of gridpoints in x-direction. One gridpoint represents a grain diameter. 
         Ny: number of gridpoints in y-direction. One gridpoint represents a grain diameter. 
         c_0: prefactor to the probability of entrainment given an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). Typical values to use: 4.2e-2 if you want your equilibrium slope to be roughly 1e-3, if u ~ 1000.
-        u_0: prefactor to the shear-stress component of the friction coefficient (see mu_c below). Typical values to use: 0.81e-2.
+        u_0: prefactor to the shear-stress component of the friction coefficient (see mu_c below). Typical values to use: 5e-3.
         u_c: The critical velocity, above which random fluid entrainments become more and more common. Typical values include: 150
         u_sig: Determines how sharp the probability of random fluid entrainment increases from 0 to 1, when u ~ u_c. Typical values include: 10
         alpha_0: prefactor to the friction closure in the velocity profile calculation. A value of alpha_0 = 1.e-3 and a depth of 10 results in a depth-averaged velocity 100, which corresponds to around 1 m/s. NOTE: if changing depth by a factor c, then (in order to keep the same velocity profile), change nu_t and alpha_0 by the same factor c.
