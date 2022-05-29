@@ -857,7 +857,7 @@ class set_q(ez):
         rndc = self.rng.uniform(0.0, 1.0,size=(self.Ny,self.Nx))
         
         # In places where p > rndc, entrainments happen.
-        ep_temp[rndc<=p_temp] = True
+        ep_temp[rndc<p_temp] = True
 
         # Subtract from places upstream of where we found them entrained.
         ys,xs = np.where(ep_temp ^ self.ep)
@@ -1022,8 +1022,6 @@ class set_f(ez):
             ## Avalanches:
             self.ep, _ = self.a_entrain()
         
-
-                
         ## Add to time:
         self.tstep += 1
         
@@ -1150,7 +1148,7 @@ class set_f(ez):
         rndc = self.rng.uniform(0.0, 1.0,size=(self.Ny,self.Nx))
         
         # In places where p > rndc, entrainments happen.
-        ep_temp[rndc<=p_temp] = True
+        ep_temp[rndc<p_temp] = True
 
         # Subtract from places upstream of where we found them entrained.
         ys,xs = np.where(ep_temp ^ self.ep)
