@@ -181,15 +181,39 @@ class ez():
         """
         Calculates and returns z, given e (pre-time-step) and ep (post-time-step) entrainment matrices. Does so in a way that conserves grains.
         """
-        
+        # Copy of arrays of interest, with potential masking
+        if self.mask_index==None:
+            mask_index=0
+        else:
+            mask_index=self.mask_index
+            
         z_temp = np.copy(self.z)
         
         if periodic:
             edom = np.copy(self.e)
+            
+            # Sometimes a random entrainment needs to happen, and this makes sure it happens wherever the depth is > 0.
+            # Calculate depth:
+            depth_m_full = (self.build_bed(self.slope)[mask_index:self.Ny-mask_index,:]+self.water_h - self.z[mask_index:self.Ny-mask_index,:])
+            depth_m_full[depth_m_full<0]=0.0
+
+            # Then take the x-average of everything
+            D = np.mean(depth_m_full,axis=1)
+
+            try:
+                il = np.where(D>0)[0][0] + mask_index
+                D = D[D>0]
+                ir = il+len(D)
+            except:
+                il = mask_index
+                ir = self.Ny-mask_index
         else:
             # Make sure to exclude points that leave the domain
             dxexcl = self.e*self.dx_mat+self.Xmesh
             edom = self.e*(dxexcl < self.Nx)
+            
+            il = mask_index
+            ir = self.Ny-mask_index
         
         dxs = np.unique(self.dx_mat*edom)
         z_temp_s = np.zeros(self.Nx,dtype=int)
@@ -224,7 +248,7 @@ class ez():
             eproll = np.roll(self.ep,-x[0],axis=1)
             indlist = np.unique(np.where(eproll[:,:np.max(self.dx_mat)+1])[0])
             if len(indlist)<abs(z_temp_s[x][0]):
-                indlist= np.concatenate((indlist,random.sample(np.setdiff1d(np.arange(self.Ny),indlist).tolist(),k=abs(z_temp_s[x][0])-len(indlist))))
+                indlist= np.concatenate((indlist,random.sample(np.setdiff1d(np.arange(il,ir),indlist).tolist(),k=abs(z_temp_s[x][0])-len(indlist))))
             ind = random.sample(indlist.tolist(),k=abs(z_temp_s[x][0]))
             z_temp[ind,x] -= 1/self.zfactor # entrain
         
