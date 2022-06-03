@@ -306,12 +306,6 @@ class ez():
         """
         return [self.tstep,self.z,self.ep,self.p,self.dx_mat]
     
-    def get_scalars(self):
-        """
-        Get scalar outputs of model: returns [tstep, bed_activity, q_mid,e_mid,e_last]
-        """
-        return [self.tstep,self.bed_activity(),self.q_profile_calc()[int(self.Nx/2)],np.sum(self.ep,axis=0)[int(self.Nx/2)],np.sum(self.ep,axis=0)[-1]]
-    
     def set_state(self,data):
         """
         Set current state of model: input must be in format [tstep,z,ep,p,dx_mat]. To be used with 'load_data'. 
@@ -1258,3 +1252,16 @@ class set_f(ez):
         Get parameters of model: returns [Nx,Ny,c_0,u_0,u_c,u_sig,alpha_0,nu_t,skipmax,initial,slope,zfactor,bed_h,mask_index,g_0,mu_c,water_h,alpha_1]
         """
         return {'Nx':self.Nx,'Ny':self.Ny,'c_0':self.c_0,'u_0':self.u_0,'u_c':self.u_c,'u_sig':self.u_sig,'alpha_0':self.alpha_0,'nu_t':self.nu_t,'skipmax':self.skipmax,'initial':self.initial,'slope':self.slope,'zfactor':self.zfactor,'bed_h':self.bed_h,'mask_index':self.mask_index,'g_0':self.g_0,'mu_c':self.mu_c,'water_h':self.water_h,'alpha_1':self.alpha_1}
+
+    def get_scalars(self):
+        """
+        Get scalar outputs of model: returns [tstep, bed_activity, q_mid,e_mid,e_last, mean_u, max_u, water_flux, aspect_ratio (width divided by height)]
+        """
+        # Calculate depth:
+        depth_m_full = (self.build_bed(self.slope)+self.water_h - self.z)
+        depth_m_full[depth_m_full<0]=0.0
+
+        # Then take the x-average of everything
+        D = np.mean(depth_m_full,axis=1)
+        
+        return [self.tstep,self.bed_activity(),self.q_profile_calc()[int(self.Nx/2)],np.sum(self.ep,axis=0)[int(self.Nx/2)],np.sum(self.ep,axis=0)[-1],np.mean(self.u[:,0]),np.max(self.u[:,0]),np.sum(D*self.u[:,0]),len(D[D>0])/np.mean(D)]
