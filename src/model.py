@@ -939,10 +939,10 @@ class set_f(ez):
         Nx: number of gridpoints in x-direction. One gridpoint represents a grain diameter. 
         Ny: number of gridpoints in y-direction. One gridpoint represents a grain diameter. 
         c_0: prefactor to the probability of entrainment given an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). Typical values to use: 4.2e-2 if you want your equilibrium slope to be roughly 1e-3, if u ~ 1000.
-        u_0: prefactor to the shear-stress component of the friction coefficient (see mu_c below). Typical values to use: 5e-3.
+        u_0: prefactor to the shear-stress component of the friction coefficient (see mu_c below). Typical values to use: 6.5e-3.
         u_c: The critical velocity, above which random fluid entrainments become more and more common. Typical values include: 150
         u_sig: Determines how sharp the probability of random fluid entrainment increases from 0 to 1, when u ~ u_c. Typical values include: 10
-        alpha_0: prefactor to the friction closure in the velocity profile calculation. A value of alpha_0 = 1.e-3 and a depth of 10 results in a depth-averaged velocity 100, which corresponds to around 1 m/s. NOTE: if changing depth by a factor c, then (in order to keep the same velocity profile), change nu_t and alpha_0 by the same factor c.
+        alpha_0: prefactor to the friction closure in the velocity profile calculation. A value of alpha_0 = 1.e-4 and a depth of 10 results in a depth-averaged velocity 100, which corresponds to around 1 m/s. NOTE: if changing depth by a factor c, then (in order to keep the same velocity profile), change nu_t and alpha_0 by the same factor c.
         nu_t : turbulent viscosity used in the calculation of the velocity profile. A value of nu_t = 1e-1 and depth = 10 results in a boundary layer roughly 50 units wide. Note that the boundary layer size scales like sqrt(nu_t). NOTE: if you want to have periodic boundary conditions in the y-direction, set nu_t = 0. Then the velocity will be determined by a balance of friction and the gravitational acceleration.
         
         Optional parameters:
@@ -1129,8 +1129,7 @@ class set_f(ez):
 
             if self.nu_t>0:
                 def fun(y,u):
-                    # return np.vstack((u[1],-self.g*Dint(y)*self.slope/self.nu_t+self.alpha_0*(1+self.alpha_1*epint(y))/self.nu_t*u[0]))
-                    return np.vstack((u[1],-self.g*Dint(y)*self.slope/self.nu_t+(1+Dpint(y)**2)*self.alpha_0*(1+self.alpha_1*epint(y))/self.nu_t*u[0]))
+                    return np.vstack((u[1],-self.g*Dint(y)*self.slope/self.nu_t+(1+Dpint(y)**2)*(self.alpha_0+self.alpha_1*epint(y))*(u[0]/Dint(y))**2/self.nu_t))
                 def bc(ua,ub):
                     return np.array([ua[0],ub[0]])
                 u_0 = np.zeros((2,ys.size))
@@ -1140,8 +1139,8 @@ class set_f(ez):
                 # u_out[mask_index+il:mask_index + il + len(D),:] = np.tile(u.sol(ys)[0],(self.Nx,1)).T
                 u_out[mask_index+il:mask_index + il + len(D),:] = np.tile(u.sol(ys)[0]/D,(self.Nx,1)).T
             else:
-                # u_out[mask_index+il:mask_index + il + len(D),:] = np.tile((self.g*D*self.slope)/((1+(np.gradient(D))**2)*self.alpha_0*(1+self.alpha_1*ep_temp)),(self.Nx,1)).T
-                u_out[mask_index+il:mask_index + il + len(D),:] = np.tile((self.g*self.slope)/((1+(np.gradient(D))**2)*self.alpha_0*(1+self.alpha_1*ep_temp)),(self.Nx,1)).T
+                u_out[mask_index+il:mask_index + il + len(D),:] = np.tile(((self.g*self.slope*D)/((1+Dpint(y)**2)*(self.alpha_0+self.alpha_1*epint(y))))**(1/2.),(self.Nx,1)).T
+                
         return u_out
     
     
