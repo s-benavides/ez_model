@@ -81,9 +81,6 @@ class ez():
         ## Initiates calculations:
         # Hop lengths
         self.dx_mat = self.dx_calc()
-        
-        ## Output keys:
-        self.okeys = ['tstep','bed_activity','q_mid','e_mid','e_last']
 
     #########################################
     ####       Dynamics and Calcs      ######
@@ -979,6 +976,9 @@ class set_f(ez):
         
         ## Flow velocity:
         self.u = self.u_calc()        
+        
+        ## Output keys:
+        self.okeys = ['tstep','bed_activity','q_mid','e_mid','e_last', 'mean_u', 'max_u', 'water_flux', 'aspect_ratio']
         
     #########################################
     ####       Dynamics and Calcs      ######
