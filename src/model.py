@@ -1117,8 +1117,15 @@ class set_f(ez):
 
         if len(D)>0:
             ys = np.arange(len(D))
-            Dint = interp1d(ys,D)
-            Dpint = interp1d(ys,np.gradient(D))
+            
+            # Smooth 
+            kernel_size = 10
+            kernel = np.ones(kernel_size) / kernel_size
+            D_convolved = np.convolve(D, kernel, mode='same')
+            
+            # Interpolate
+            Dint = interp1d(ys,D_convolved)
+            Dpint = interp1d(ys,np.gradient(D_convolved))
             epint = interp1d(ys,ep_temp)
 
             if self.nu_t>0:
@@ -1131,9 +1138,9 @@ class set_f(ez):
                 u = solve_bvp(fun,bc,ys,u_0)
 
                 # u_out[mask_index+il:mask_index + il + len(D),:] = np.tile(u.sol(ys)[0],(self.Nx,1)).T
-                u_out[mask_index+il:mask_index + il + len(D),:] = np.tile(u.sol(ys)[0]/D,(self.Nx,1)).T
+                u_out[mask_index+il:mask_index + il + len(D),:] = np.tile(u.sol(ys)[0]/D_convolved,(self.Nx,1)).T
             else:
-                u_out[mask_index+il:mask_index + il + len(D),:] = np.tile(((self.g*self.slope*D)/((1+Dpint(y)**2)*(self.alpha_0+self.alpha_1*epint(y))))**(1/2.),(self.Nx,1)).T
+                u_out[mask_index+il:mask_index + il + len(D),:] = np.tile(((self.g*self.slope*D_convolved)/((1+Dpint(y)**2)*(self.alpha_0+self.alpha_1*epint(y))))**(1/2.),(self.Nx,1)).T
                 
         return u_out
     
