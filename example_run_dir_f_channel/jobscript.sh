@@ -13,9 +13,11 @@
 ##SBATCH --partition=sched_any_quicktest
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=16
-#SBATCH --time=4:00:00 ## Extra 5 mins to do last saves
+##SBATCH --exclude=node[390-391]
+#SBATCH --constraint=centos7
+#SBATCH --time=12:00:00 ## Extra 5 mins to do last saves
 ##SBATCH --time=00:15:00 ## Extra 5 mins to do last saves
-#SBATCH -J ez_256x256_f_channel  # sensible name for the job
+#SBATCH -J ez_w60d3d5_128x64  # sensible name for the job
 
 # Setup conda and dedalus environment
 minicondahome="/home/santiago_b/miniconda3"
