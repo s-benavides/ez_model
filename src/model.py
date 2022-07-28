@@ -978,7 +978,7 @@ class set_f(ez):
         self.u = self.u_calc()        
         
         ## Output keys:
-        self.okeys = ['tstep','bed_activity','q_mid','e_mid','e_last', 'mean_u', 'max_u', 'water_flux', 'aspect_ratio']
+        self.okeys = ['tstep','bed_activity','q_mid','e_mid','e_last', 'mean_u', 'max_u', 'water_flux', 'aspect_ratio','mean_depth']
         
     #########################################
     ####       Dynamics and Calcs      ######
@@ -1262,7 +1262,7 @@ class set_f(ez):
 
     def get_scalars(self):
         """
-        Get scalar outputs of model: returns [tstep, bed_activity, q_mid,e_mid,e_last, mean_u, max_u, water_flux, aspect_ratio (width divided by height)]
+        Get scalar outputs of model: returns [tstep, bed_activity, q_mid,e_mid,e_last, mean_u, max_u, water_flux, aspect_ratio (width divided by height), mean depth]
         """
         # Calculate depth:
         depth_m_full = (self.build_bed(self.slope)+self.water_h - self.z)
@@ -1271,4 +1271,4 @@ class set_f(ez):
         # Then take the x-average of everything
         D = np.mean(depth_m_full,axis=1)
         
-        return [self.tstep,self.bed_activity(),self.q_profile_calc()[int(self.Nx/2)],np.sum(self.ep,axis=0)[int(self.Nx/2)],np.sum(self.ep,axis=0)[-1],np.mean(self.u[:,0]),np.max(self.u[:,0]),np.sum(D*self.u[:,0]),len(D[D>0])/np.mean(D)]
+        return [self.tstep,self.bed_activity(),np.mean(self.dx_mat*self.e,axis=0)[int(self.Nx/2)],np.sum(self.ep,axis=0)[int(self.Nx/2)],np.sum(self.ep,axis=0)[-1],np.mean(self.u[:,0]),np.max(self.u[:,0]),np.sum(D*self.u[:,0]),len(D[D>0])/np.mean(D),np.mean(D)]
