@@ -922,7 +922,7 @@ class set_f(ez):
     In this model, the main input parameter is f, which is the probability that extreme events in fluid stresses entrain a grain and move it downstream.
     The entrained grains flow out of one end and, importantly, come back into the other end: this mode has periodic boundary conditions in all directions.
     """
-    def __init__(self,Nx,Ny,c_0,u_0,u_c,u_sig,alpha_0,nu_t,skipmax=3,initial=0.0,slope=0,zfactor=2000,bed_h = 50,mask_index=None,g_0=3.33333,mu_c=1.0,water_h=0.0,alpha_1=1.0):
+    def __init__(self,Nx,Ny,c_0,u_0,u_c,u_sig,alpha_0,nu_t,skipmax=3,initial=0.0,slope=0,zfactor=2000,bed_h = 50,mask_index=None,g_0=3.33333,mu_c=1.0,water_h=0.0,alpha_1=1.0,flux_const = False):
         """
         Initialize the model       
         Parameters for ez superclass
@@ -963,12 +963,18 @@ class set_f(ez):
         self.u_0 = u_0
         self.u_c = u_c
         self.u_sig = u_sig
-        self.alpha_0 = alpha_0
         self.nu_t = nu_t
         self.g_0 = g_0
         self.mu_c = mu_c
         self.water_h = water_h
         self.alpha_1 = alpha_1
+        self.flux_const = flux_const
+        
+        # If flux_const= True, then 'alpha_0' that is fed in is the desired velocity. Else, it's the actual value of alpha_0
+        if self.flux_const:
+            self.udesired = alpha_0
+        else:
+            self.alpha_0 = alpha_0
         
         # Wait until the first step to initialize. For now set to zero. This is in case we only have a subdomain with depth > 0.
         self.ep = np.zeros((self.Ny,self.Nx),dtype=bool)
@@ -1006,6 +1012,34 @@ class set_f(ez):
 
             self.ep *= (depth_m_full>0)
             
+        if self.flux_const:
+            # Masking
+            if self.mask_index==None:
+                mask_index=0
+            else:
+                mask_index=self.mask_index
+
+            # Calculate depth:
+            depth_m_full = (self.build_bed(self.slope)[mask_index:self.Ny-mask_index,:]+self.water_h - self.z[mask_index:self.Ny-mask_index,:])
+            depth_m_full[depth_m_full<0]=0.0            
+            # Then take the x-average of everything
+            D = np.mean(depth_m_full,axis=1)
+            
+            # Calculate slope_y
+            z_temp = np.copy(self.z[mask_index:self.Ny-mask_index,:])
+            # Finally, apply avalanche condition
+            slope_y = np.zeros(z_temp[:,0].shape)
+            # Forward slope calculation in first half:
+            slope_y[:int(self.Ny/2-mask_index)] = np.diff(np.mean(z_temp,axis=1),axis=0)[:int(self.Ny/2-mask_index)]
+            # Backward slope calculation in second half:
+            slope_y[int(self.Ny/2-mask_index):] = np.flip(np.diff(np.flip(np.mean(z_temp,axis=1)),axis=0))[int(self.Ny/2-mask_index)-1:] # Making sure to shift because diff is a different shape
+            
+            # Estimate mean depth in 'flat' region
+            D_mean = np.mean(D[(np.abs(slope_y)<0.1)&(D>0)])
+
+            # Evolve water_h so that it tries to keep constant water flux.
+            self.alpha_0 = self.udesired**(-2)*(D_mean/10)
+        
         ## Copies and auxiliary entrainment matrix
         self.e = np.copy(self.ep)    
         
