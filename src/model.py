@@ -973,6 +973,7 @@ class set_f(ez):
         # If flux_const= True, then 'alpha_0' that is fed in is the desired velocity. Else, it's the actual value of alpha_0
         if self.flux_const:
             self.udesired = alpha_0
+            self.alpha_0 = np.nan # placeholder until it's defined in the time-stepping.
         else:
             self.alpha_0 = alpha_0
         
