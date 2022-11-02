@@ -1152,12 +1152,12 @@ class set_f(ez):
 
         if len(D)>0:
             ys = np.arange(len(D))
-            
+
             # Smooth 
             kernel_size = 10
             kernel = np.ones(kernel_size) / kernel_size
-            D_convolved = np.convolve(D, kernel, mode='same')
-            
+            D_convolved = np.convolve(np.tile(D,3), kernel, mode='same')[len(D):2*len(D)]
+
             # Interpolate
             Dint = interp1d(ys,D_convolved)
             Dpint = interp1d(ys,np.gradient(D_convolved))
