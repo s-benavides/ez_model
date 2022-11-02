@@ -344,7 +344,7 @@ class ez():
                 params = f.create_group('parameters')
                 paramdict = self.get_params()
                 for k, v in paramdict.items():
-                    params.create_dataset(k, data=np.array(v))
+                    params.create_dataset(k, data=np.array(v,dtype=np.float64))
 
                 # State of simulation
                 state = f.create_group('state')
@@ -360,7 +360,7 @@ class ez():
                     params = f.create_group('parameters')
                     paramdict = self.get_params()
                     for k, v in paramdict.items():
-                        params.create_dataset(k, data=np.array(v))
+                        params.create_dataset(k, data=np.array(v,dtype=np.float64))
 
                     # State of simulation
                     state = f.create_group('state')
@@ -405,7 +405,7 @@ class ez():
                 # Parameters
                 params = f.create_group('parameters')
                 for k, v in self.get_params().items():
-                    params.create_dataset(k, data=np.array(v))
+                    params.create_dataset(k, data=np.array(v,dtype=np.float64))
 
                 scalars = f.create_group('scalars')
                 for ii,d in enumerate(np.array(data).T):
@@ -416,7 +416,7 @@ class ez():
                 with h5py.File(fname,'w') as f:
                     params = f.create_group('parameters')
                     for k, v in self.get_params().items():
-                        params.create_dataset(k, data=np.array(v))
+                        params.create_dataset(k, data=np.array(v,dtype=np.float64))
 
                     scalars = f.create_group('scalars')
                     for ii,d in enumerate(np.array(data).T):
@@ -1175,7 +1175,7 @@ class set_f(ez):
                 # u_out[mask_index+il:mask_index + il + len(D),:] = np.tile(u.sol(ys)[0],(self.Nx,1)).T
                 u_out[mask_index+il:mask_index + il + len(D),:] = np.tile(u.sol(ys)[0]/D_convolved,(self.Nx,1)).T
             else:
-                u_out[mask_index+il:mask_index + il + len(D),:] = np.tile(((self.g*self.slope*D_convolved)/((1+Dpint(y)**2)*(self.alpha_0+self.alpha_1*epint(y))))**(1/2.),(self.Nx,1)).T
+                u_out[mask_index+il:mask_index + il + len(D),:] = np.tile(((self.g*self.slope*D_convolved)/((1+Dpint(ys)**2)*(self.alpha_0+self.alpha_1*epint(ys))))**(1/2.),(self.Nx,1)).T
                 
         return u_out
     
