@@ -1310,7 +1310,9 @@ class set_f(ez):
         if np.any(self.ep)>0:
             mint,maxt = np.min(np.where(self.ep)[0]),np.max(np.where(self.ep)[0])
             w1 = maxt-mint
+            q_mid = np.sum(self.dx_mat*self.e,axis=0)[int(self.Nx/2)]/w1
         else:
             w1 = 0
+            q_mid = 0
         
-        return [self.tstep,self.bed_activity(),np.sum(self.dx_mat*self.e,axis=0)[int(self.Nx/2)]/w1,np.sum(self.ep,axis=0)[int(self.Nx/2)],np.sum(self.ep,axis=0)[-1],np.mean(self.u[:,0]),np.max(self.u[:,0]),np.sum(D[D>0]*self.u[:,0][D>0]),len(D[D>0])/np.mean(D[D>0]),w1/np.mean(D[D>0]),np.mean(D[D>0])]
+        return [self.tstep,self.bed_activity(),q_mid,np.sum(self.ep,axis=0)[int(self.Nx/2)],np.sum(self.ep,axis=0)[-1],np.mean(self.u[:,0]),np.max(self.u[:,0]),np.sum(D[D>0]*self.u[:,0][D>0]),len(D[D>0])/np.mean(D[D>0]),w1/np.mean(D[D>0]),np.mean(D[D>0])]
