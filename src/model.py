@@ -1156,7 +1156,10 @@ class set_f(ez):
             # Smooth 
             kernel_size = 10
             kernel = np.ones(kernel_size) / kernel_size
-            D_convolved = np.convolve(np.tile(D,3), kernel, mode='same')[len(D):2*len(D)]
+            if self.mask_index==None:
+                D_convolved = np.convolve(np.tile(D,3), kernel, mode='same')[len(D):2*len(D)]
+            else:
+                D_convolved = np.convolve(D, kernel, mode='same')
 
             # Interpolate
             Dint = interp1d(ys,D_convolved)
