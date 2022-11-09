@@ -1310,8 +1310,12 @@ class set_f(ez):
         D = np.mean(depth_m_full,axis=1)
         
         # Width based on where transport is happening
-        mint,maxt = np.min(np.where(self.ep)[0]),np.max(np.where(self.ep)[0])
-        w1 = maxt-mint
+        if np.any(self.ep):
+            mint,maxt = np.min(np.where(self.ep)[0]),np.max(np.where(self.ep)[0])
+            w1 = maxt-mint
+        else:
+            w1 = 0
+
         if w1>0:
             q_mid = np.sum(self.dx_mat*self.e,axis=0)[int(self.Nx/2)]/w1
         else:
