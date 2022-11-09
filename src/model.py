@@ -523,7 +523,7 @@ class ez():
             dt+=1 
             if dt % dt_frame ==0:
                 dt = 0
-                es.append(self.e)    
+                es.append(self.e)
                
         es=np.array(es)
 
@@ -602,15 +602,17 @@ class ez():
         zs = [np.mean(self.z,axis=0)]
         es = [self.e]
         qs = [self.bed_activity()]
+        ts = [1]
         dt = 0
         for frame in tqdm.tqdm(range(t_steps)):
             self.step(bed_feedback=bed_feedback)
-            qs.append(self.bed_activity())
+            qs.append(self.bed_activity())    
+            ts.append(frame+2)
             dt+=1 
             if dt % dt_frame ==0:
                 dt = 0
                 zs.append(np.mean(self.z,axis=0))
-                es.append(self.e)    
+                es.append(self.e)
                 
         zs=np.array(zs)
         es=np.array(es)
@@ -633,7 +635,7 @@ class ez():
         ax1.set_title("Entrainment Field")
         ax2.set_ylabel("Height (grain diameters)")
         ax2.set_xlabel(r"$x$")
-        ax2.set_xlim(0,1)
+        ax2.set_xlim(0,self.Nx)
         ax2.set_ylim(np.min(zs[-1]),np.max(zs[-1]))
         ax3.set_ylabel(r"Bed activity")
         ax3.set_xlabel(r"$t$")
