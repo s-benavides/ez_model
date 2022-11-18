@@ -904,7 +904,7 @@ class set_q(ez):
         c0str = str(self.c_0).replace(".", "d")
         fstr = str(self.f).replace(".", "d")
         qstr = str(self.q_in).replace(".", "d")
-        return 'ez_data_Nx_set_q_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_c_0_'+c0str+'_f_'+fstr+'_q_in_'+qstr+'_'+str(today)
+        return 'ez_data_set_q_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_c_0_'+c0str+'_f_'+fstr+'_q_in_'+qstr+'_'+str(today)
 
     def get_params(self):
         """
@@ -1292,7 +1292,7 @@ class set_f(ez):
     def export_name(self,today):
         c0str = str(self.c_0).replace(".", "d")
         slope = str(self.slope).replace(".", "d")
-        return 'ez_data_Nx_set_f_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_c_0_'+c0str+'_slope_'+slope+'_'+str(today)
+        return 'ez_data_set_f_Nx_'+str(self.Nx)+'_Ny_'+str(self.Ny)+'_c_0_'+c0str+'_slope_'+slope+'_'+str(today)
 
     def get_params(self):
         """
