@@ -733,7 +733,7 @@ class set_q(ez):
         
         self.f = f
         self.fb = fb
-        self.scrit = 1/3/self.c_0
+        self.scrit = 1/3/self.c_0/(1-self.fb*self.q_in/self.Ny)
         
         ####################
         ## INITIAL fields ##
