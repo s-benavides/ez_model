@@ -1120,7 +1120,7 @@ class set_f(ez):
         """
         Takes the current bed, performs an x-average (accounting for mean slope), and solves the 1D BVP:
 
-        nu_t dy(dy(u)) = - g slope_x depth + (1 + dy(depth)^2) alpha(e) u
+        nu_t dy(dy(u)) = - g slope_x depth + (1 + dy(depth)^2) alpha(e) u^2
 
         where u is the depth-averaged flow, nu_t is the turbulent viscosity, and alpha is the 'closure' relating the entrainment field (averaged in x) to a friction. 
 
