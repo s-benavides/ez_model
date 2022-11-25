@@ -190,13 +190,9 @@ class ez():
             edom = np.copy(self.e)
             
             # Sometimes a random entrainment needs to happen, and this makes sure it happens wherever the depth is > 0.
-            # Calculate depth:
-            depth_m_full = (self.build_bed(self.slope)[mask_index:self.Ny-mask_index,:]+self.water_h - self.z[mask_index:self.Ny-mask_index,:])
-            depth_m_full[depth_m_full<0]=0.0
-
-            # Then take the x-average of everything
-            D = np.mean(depth_m_full,axis=1)
-
+            # Calculate depth:            
+            D = self.depth_xavg()
+            
             try:
                 il = np.where(D>0)[0][0] + mask_index
                 D = D[D>0]
@@ -971,20 +967,14 @@ class set_f(ez):
         self.water_h = water_h
         self.alpha_1 = alpha_1
         self.flux_const = flux_const
-        
-        # If flux_const= True, then 'alpha_0' that is fed in is the desired velocity. Else, it's the actual value of alpha_0
-        if self.flux_const:
-            self.udesired = alpha_0
-            self.alpha_0 = np.nan # placeholder until it's defined in the time-stepping.
-        else:
-            self.alpha_0 = alpha_0
+        self.alpha_0 = alpha_0
         
         # Wait until the first step to initialize. For now set to zero. This is in case we only have a subdomain with depth > 0.
         self.ep = np.zeros((self.Ny,self.Nx),dtype=bool)
         self.e = np.zeros((self.Ny,self.Nx),dtype=bool)
         
         ## Flow velocity:
-        self.u = self.u_calc()        
+        self.u = self.u_calc()
         
         ## Output keys:
         self.okeys = ['tstep','bed_activity','q_mid','e_mid','e_last', 'mean_u', 'max_u', 'water_flux', 'aspect_ratio','aspect_ratio_2','mean_depth']
@@ -1006,6 +996,12 @@ class set_f(ez):
         """
         # Initialize randomly on first time step (not done at initialization of ez in case a channel is set where the depth is zero in some region.
         if self.tstep==0:
+            # Masking
+            if self.mask_index==None:
+                mask_index=0
+            else:
+                mask_index=self.mask_index
+                
             A = self.rng.random(size=(self.Ny,self.Nx))
             self.ep = A<self.initial        
             # Only initialize grains inside the flow domain
@@ -1015,40 +1011,16 @@ class set_f(ez):
 
             self.ep *= (depth_m_full>0)
             
-        if self.flux_const:
-            # Masking
-            if self.mask_index==None:
-                mask_index=0
-            else:
-                mask_index=self.mask_index
-
-            # Calculate depth:
-            depth_m_full = (self.build_bed(self.slope)[mask_index:self.Ny-mask_index,:]+self.water_h - self.z[mask_index:self.Ny-mask_index,:])
-            depth_m_full[depth_m_full<0]=0.0            
-            # Then take the x-average of everything
-            D = np.mean(depth_m_full,axis=1)
-            
-            # Calculate slope_y
-            z_temp = np.copy(self.z[mask_index:self.Ny-mask_index,:])
-            # Finally, apply avalanche condition
-            slope_y = np.zeros(z_temp[:,0].shape)
-            # Forward slope calculation in first half:
-            slope_y[:int(self.Ny/2-mask_index)] = np.diff(np.mean(z_temp,axis=1),axis=0)[:int(self.Ny/2-mask_index)]
-            # Backward slope calculation in second half:
-            slope_y[int(self.Ny/2-mask_index):] = np.flip(np.diff(np.flip(np.mean(z_temp,axis=1)),axis=0))[int(self.Ny/2-mask_index)-1:] # Making sure to shift because diff is a different shape
-            
-            # Estimate mean depth in 'flat' region
-            D_mean = np.mean(D[(np.abs(slope_y)<0.1)&(D>0)])
-
-            # Evolve water_h so that it tries to keep constant water flux.
-            self.alpha_0 = self.udesired**(-2)*(D_mean/10)
+            # If we are in the constant flux case, then we calculate the initial depth (as an approximation to flux, which goes like D^3/2)
+            if self.flux_const:
+                Dm = self.depth_xavg()
+                self.D_init = np.mean(Dm[Dm>0])
+                
+        ## Flow velocity:
+        self.u = self.u_calc()
         
         ## Copies and auxiliary entrainment matrix
         self.e = np.copy(self.ep)    
-        
-        # if (self.tstep%10)==0:
-        ## Flow velocity:
-        self.u = self.u_calc()
         
         if bal:        
             temp = np.sum(self.e)+np.int(np.round(np.sum(self.z)*self.zfactor))
@@ -1077,6 +1049,13 @@ class set_f(ez):
             ## Avalanches:
             self.ep, _ = self.a_entrain()
         
+        if self.flux_const:
+            # We will keep the flux approximately constant by changing water_h. Since Q is approximately proportional to D^(3/2), we will do this by keeping the depth constant.
+            Dm = self.depth_xavg()
+            D_temp = np.mean(Dm[Dm>0])
+            
+            self.water_h = self.water_h + self.D_init - D_temp
+            
         ## Add to time:
         self.tstep += 1
         
@@ -1088,6 +1067,21 @@ class set_f(ez):
     ###########################
     # Calculate probabilities #
     ###########################
+    def depth_xavg(self):
+        # Masking
+        if self.mask_index==None:
+            mask_index=0
+        else:
+            mask_index=self.mask_index
+
+        # Calculate depth:
+        depth_m_full = (self.build_bed(self.slope)[mask_index:self.Ny-mask_index,:]+self.water_h - self.z[mask_index:self.Ny-mask_index,:])
+        depth_m_full[depth_m_full<0]=0.0            
+        # Then take the x-average of everything
+        D = np.mean(depth_m_full,axis=1)
+        
+        return D
+    
     def p_calc(self):
         """
         Calculates and returns probability matrix, given c and e.
@@ -1135,11 +1129,8 @@ class set_f(ez):
             mask_index=self.mask_index
 
         # Calculate depth:
-        depth_m_full = (self.build_bed(self.slope)[mask_index:self.Ny-mask_index,:]+self.water_h - self.z[mask_index:self.Ny-mask_index,:])
-        depth_m_full[depth_m_full<0]=0.0
-
         # Then take the x-average of everything
-        D = np.mean(depth_m_full,axis=1)
+        D = self.depth_xavg()
         ep_temp = np.mean(self.ep[mask_index:self.Ny-mask_index,:],axis=1)
 
         # Indices for filling uout back in.
@@ -1304,12 +1295,13 @@ class set_f(ez):
         """
         Get scalar outputs of model: returns [tstep, bed_activity, q_mid,e_mid,e_last, mean_u, max_u, water_flux, aspect_ratio (width, based on depth>0, divided by height), aspect_ratio_2 (width, based on transporting grains, divided by height), mean depth]
         """
+        if self.mask_index==None:
+            mask_index=0
+        else:
+            mask_index=self.mask_index
         # Calculate depth:
-        depth_m_full = (self.build_bed(self.slope)+self.water_h - self.z)
-        depth_m_full[depth_m_full<0]=0.0
-
         # Then take the x-average of everything
-        D = np.mean(depth_m_full,axis=1)
+        D = self.depth_xavg()
         
         # Width based on where transport is happening
         if np.any(self.ep):
@@ -1324,4 +1316,4 @@ class set_f(ez):
             w1 = 0
             q_mid = 0
         
-        return [self.tstep,self.bed_activity(),q_mid,np.sum(self.ep,axis=0)[int(self.Nx/2)],np.sum(self.ep,axis=0)[-1],np.mean(self.u[:,0]),np.max(self.u[:,0]),np.sum(D[D>0]*self.u[:,0][D>0]),len(D[D>0])/np.mean(D[D>0]),w1/np.mean(D[D>0]),np.mean(D[D>0])]
+        return [self.tstep,self.bed_activity(),q_mid,np.sum(self.ep,axis=0)[int(self.Nx/2)],np.sum(self.ep,axis=0)[-1],np.mean(self.u[:,0]),np.max(self.u[:,0]),np.sum(D[D>0]*self.u[mask_index:self.Ny-mask_index,0][D>0]),len(D[D>0])/np.mean(D[D>0]),w1/np.mean(D[D>0]),np.mean(D[D>0])]
