@@ -977,7 +977,7 @@ class set_f(ez):
         self.u = self.u_calc()
         
         ## Output keys:
-        self.okeys = ['tstep','bed_activity','q_mid','e_mid','e_last', 'mean_u', 'max_u', 'water_flux', 'aspect_ratio','aspect_ratio_2','mean_depth']
+        self.okeys = ['tstep','bed_activity','q_mid','e_mid','e_last', 'mean_u', 'max_u', 'water_flux', 'aspect_ratio','aspect_ratio_2','mean_depth','water_h']
         
     #########################################
     ####       Dynamics and Calcs      ######
@@ -1014,7 +1014,8 @@ class set_f(ez):
             # If we are in the constant flux case, then we calculate the initial depth (as an approximation to flux, which goes like D^3/2)
             if self.flux_const:
                 Dm = self.depth_xavg()
-                self.D_init = np.mean(Dm[Dm>0])
+                slope_y = np.abs(np.gradient(Dm))
+                self.D_init = np.mean(Dm[(Dm>0)&(slope_y<0.1)])
                 
         ## Flow velocity:
         self.u = self.u_calc()
@@ -1052,9 +1053,10 @@ class set_f(ez):
         if self.flux_const:
             # We will keep the flux approximately constant by changing water_h. Since Q is approximately proportional to D^(3/2), we will do this by keeping the depth constant.
             Dm = self.depth_xavg()
-            D_temp = np.mean(Dm[Dm>0])
+            slope_y = np.abs(np.gradient(Dm))
+            D_temp = np.mean(Dm[(Dm>0)&(slope_y<0.1)])
             
-            self.water_h = self.water_h + self.D_init - D_temp
+            self.water_h = self.water_h + (self.D_init - D_temp)
             
         ## Add to time:
         self.tstep += 1
@@ -1293,7 +1295,7 @@ class set_f(ez):
 
     def get_scalars(self):
         """
-        Get scalar outputs of model: returns [tstep, bed_activity, q_mid,e_mid,e_last, mean_u, max_u, water_flux, aspect_ratio (width, based on depth>0, divided by height), aspect_ratio_2 (width, based on transporting grains, divided by height), mean depth]
+        Get scalar outputs of model: returns [tstep, bed_activity, q_mid,e_mid,e_last, mean_u, max_u, water_flux, aspect_ratio (width, based on depth>0, divided by height), aspect_ratio_2 (width, based on transporting grains, divided by height), mean depth, water_h]
         """
         if self.mask_index==None:
             mask_index=0
@@ -1316,4 +1318,4 @@ class set_f(ez):
             w1 = 0
             q_mid = 0
         
-        return [self.tstep,self.bed_activity(),q_mid,np.sum(self.ep,axis=0)[int(self.Nx/2)],np.sum(self.ep,axis=0)[-1],np.mean(self.u[:,0]),np.max(self.u[:,0]),np.sum(D[D>0]*self.u[mask_index:self.Ny-mask_index,0][D>0]),len(D[D>0])/np.mean(D[D>0]),w1/np.mean(D[D>0]),np.mean(D[D>0])]
+        return [self.tstep,self.bed_activity(),q_mid,np.sum(self.ep,axis=0)[int(self.Nx/2)],np.sum(self.ep,axis=0)[-1],np.mean(self.u[:,0]),np.max(self.u[:,0]),np.sum(D[D>0]*self.u[mask_index:self.Ny-mask_index,0][D>0]),len(D[D>0])/np.mean(D[D>0]),w1/np.mean(D[D>0]),np.mean(D[D>0]),self.water_h]
