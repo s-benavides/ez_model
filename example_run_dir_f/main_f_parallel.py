@@ -64,6 +64,8 @@ else:
 
     print('Starting run from zero',flush=True)
 
+overwrite_scalars=overwrite
+    
 # Initializing cross sectio file
 fname = odir+ set_f.export_name(today) +'_crosssection.h5'
 
@@ -93,7 +95,21 @@ try:
     # odata size control:
     size_lim=True # Becomes false if odata is too large, stopping the time-stepping.
     
-    while (time.time() < sim_end)&(size_lim):        
+    # Re-seeding count. Re-seeds only in first run.
+    if overwrite:
+        seed_count = 0
+    else:
+        seed_count = 12
+    
+    # For averaging profiles and variance:
+    count=2
+    ecross_avg = np.array(np.mean(set_f.e,axis=1),dtype=float)
+    ecross_var = np.zeros(ecross_avg.shape)
+    
+    # Counting consecutive t-steps with np.sum(e) = 0. Stops run if this count gets to 100000 (preventing super long runs of nothing)
+    zero_count = 0
+    
+    while (time.time() < sim_end)&(size_lim)&(zero_count<1e5):        
         # Save the output every iter_state iterations during the run. All saved in one h5 file.
         # If restarting, outputs will simply add on to the existing file.
         
@@ -102,7 +118,34 @@ try:
         if ((time.time()-start_time) % ((60*60*H)/NS)) < 1: # Save NS times per run
             print('Saving state, tstep = %s, wall_time = %s' % (set_f.tstep,time.time()-start_time),flush=True)
             set_f.export_state(odir,today=today,overwrite=overwrite)
+            overwrite=False
+            
+            print('Appending cross section profiles, tstep = %s, wall_time = %s' % (set_f.tstep,time.time()-start_time),flush=True)
+            with h5py.File(fname,'a') as f:
+                scalars = f['crosssection']
+                if new_write_bal:
+                    scalars.create_dataset('tstep',data=[set_f.tstep],shape=(1,1),maxshape=(None,1),chunks=True) 
+                    scalars.create_dataset('ecross_avg',data=[ecross_avg],shape=(1,Ny),maxshape=(None,Ny),chunks=True) 
+                    scalars.create_dataset('ecross_var',data=[ecross_var],shape = (1,Ny),maxshape=(None,Ny),chunks=True)  
+                    scalars.create_dataset('zcross_avg',data=[np.mean(set_f.z+set_f.Xmesh*np.abs(slope)-set_f.bed_h,axis=1)],shape=(1,Ny),maxshape=(None,Ny),chunks=True) 
+                    scalars.create_dataset('zcross_var',data=[set_f.z+set_f.Xmesh*np.abs(slope)-set_f.bed_h],shape = (1,Ny,Nx),maxshape=(None,Ny,Nx),chunks=True)  
+                    new_write_bal=False
+                else:
+                    scalars['tstep'].resize((scalars['tstep'].shape[0] + 1), axis = 0)
+                    scalars['tstep'][-1:] = [set_f.tstep]
+                    scalars['ecross_avg'].resize((scalars['ecross_avg'].shape[0] + 1), axis = 0)
+                    scalars['ecross_avg'][-1:] = [ecross_avg]
+                    scalars['ecross_var'].resize((scalars['ecross_var'].shape[0] + 1), axis = 0)
+                    scalars['ecross_var'][-1:] = [ecross_var]
+                    scalars['zcross_avg'].resize((scalars['zcross_avg'].shape[0] + 1), axis = 0)
+                    scalars['zcross_avg'][-1:] = [np.mean(set_f.z+set_f.Xmesh*np.abs(slope)-set_f.bed_h,axis=1)]
+                    scalars['zcross_var'].resize((scalars['zcross_var'].shape[0] + 1), axis = 0)
+                    scalars['zcross_var'][-1:] = [set_f.z+set_f.Xmesh*np.abs(slope)-set_f.bed_h]
 
+            ecross_avg = np.array(np.mean(set_f.e,axis=1),dtype=float)
+            ecross_var = np.zeros(ecross_avg.shape)
+            count=2
+            
             time.sleep(1) # Avoids saving multiple times.
         
 
@@ -145,7 +188,31 @@ try:
 
         # Take a time-step in the model:
         set_f.step()
+        
+        # Reseed with random grains if set_f.e has no active grains!
+        # We only want to do this a few times throughout the simulation, so we'll set max reseed number to 10.
+        if (seed_count<11)&(~np.any(set_f.ep)):
+            seed_count += 1
+            print("No grains! Re-seeding with grains for the %s time. tstep = %.4e" % (seed_count,set_f.tstep),flush=True)
+            A = set_f.rng.random(size=(set_f.Ny,set_f.Nx))
+            set_f.ep = A<(25/set_f.Nx/set_f.Ny)      
             
+        # Update average profiles
+        ecross_avg_new = ecross_avg + (np.array(np.mean(set_f.e,axis=1),dtype=float)-ecross_avg)/count
+        ecross_var = ecross_var + ((np.array(np.mean(set_f.e,axis=1),dtype=float)-ecross_avg)*(np.array(np.mean(set_f.e,axis=1),dtype=float)-ecross_avg_new) - ecross_var)/count
+        ecross_avg = ecross_avg_new
+        count+=1
+        
+        # Adds to zero_count if np.sum(e) = 0, otherwise resets
+        if np.sum(set_f.ep)==0:
+            zero_count += 1
+        else:
+            zero_count = 0
+        
+        # Cancels run if zero_count>=1e5.
+        if (zero_count==1e5):
+            print('Zero_count reached limit, stopping run.',flush=True)
+
     iter_end = set_f.tstep
     end_time=time.time()
     print('Finished time-stepping loop. Total real time: %.4f, iterations per second: %.4f.' % (end_time-start_time,(iter_end-iter_start)/(end_time-start_time)),flush=True)
@@ -177,6 +244,6 @@ finally:
         odata[:,1:] = q
         odata = np.ndarray.tolist(odata)
 
-    set_f.export_scalars(odir,odata,today=today,overwrite=overwrite) #If loading from previous run, make sure 'overwrite' is 0 (false), so it updates the same file.
+    set_f.export_scalars(odir,odata,today=today,overwrite=overwrite_scalars) #If loading from previous run, make sure 'overwrite' is 0 (false), so it updates the same file.
     
     print('Finished saving. Exiting... \n \n',flush=True)
