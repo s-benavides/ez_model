@@ -6,7 +6,7 @@ idir='./'
 skip = False
 
 # Searches through all directories in 'Data' folder (which are named after experiments) and imports the data:
-dirs = sorted(glob.glob(idir+'c_0*'))
+dirs = sorted(glob.glob(idir+'alpha_0*'))
 
 runs = []
 for file in dirs:

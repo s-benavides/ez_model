@@ -11,57 +11,63 @@ rank = comm.Get_rank()
 size = comm.Get_size()
 
 # Set parameters
-
-# Sets how likely an entrained grain is to entrain a neighboring grain
-c_0 = 0.5/3  
-# Sets fraction of grains randomly entrained by fluid each time step.
-f = 0.0
+# Size of domain
+Nx = 200
+Ny = 1000
 
 # Average lattice sites hopped over by grain in motion
 skipmax = 3
 
-# Velocity
-u_p = 1.0
+# Collision entrainment probability
+c_0 = 333.333
 
-# Size of domain
-Nx = 1000
-Ny = 200
+# Random fluid entrainment
+f = 0.0
 
-# Gaussian hop length dist'n? Otherwise it's exponentially distributed.
-gauss=True
+# Initial perturbations
+initial = 0.0
+
+# Mask to prevent periodic boundary conditions? 
+mask_index=None
+
+# Grain deposition scaling in z
+zfactor=2000
+
+# Initial bed height (uniform)
+bed_h = 50
+
+# Fluid feedback
+fb = 0.3
+
+# Initial slope:
+slope = 0.0
 
 # Main input parameter: number of grains dropped at one end of the domain per time step.
-q_ins = np.arange(10,110,10)
-#q_ins = np.arange(1,11)
-#q_ins = np.logspace(-2,-1.1,6)
+q_ins = np.arange(10,110,10)[1:]
+##q_ins = np.array([200,300,500,750])
 if len(q_ins)!=size:
-    print("ERROR: number of q's must match the number of cores!")
+    print("ERROR: number of parameters must match the number of cores!")
 
-# For initializing the bed if non-zero, and if overwrite=True
-mult = 1.
+# Choose number of hours to run (real time) 
+H = 11.8
 
-# Max iteration number:
-# T = int(10*T) # so that we build the bed and also have a reasonable steady state
-# T = 100 # Otherwise set manually
-H = 11.9 # Choose number of hours to run (real time) (anything more than 5 hours seems to crash due to memory)
-#H = 8 # Choose number of hours to run (real time) (anything more than 5 hours seems to crash due to memory)
+# Choose number of state and profile saves per run (one always saves at the end of the run)
+NS = 2
 
-# Iteration per state save:
-#iter_state = int(T/4) # Save during the loop, if you want. Otherwise, a final output is always saved.
-NS = 2 # Choose number of state saves per run
-
-#NSc = 10 # Choose number of bins to average the scalar data over every hour of wall time. (To avoid memory issues, use this when waiting for the bed to build up) 
-NSc = np.nan
+# Choose number of bins to average the scalar data over every hour of wall time. (To avoid memory issues, use this when waiting for the bed to build up) 
+##NSc = 10
 # NOTE: If you don't want to average and want to save every tstep, just make NSc = np.nan 
+NSc = np.nan
 
 # Are we continuing from a previous run?
 overwrite = bool(0) # 1 if starting a new run, 0 if continuing from previous save. 
+today = '2022-10-30'
 
 # Input directory
 idirs = []
-for q in q_ins:
-    qstr = ("%e" % q).replace(".", "d")
-    dirname = './q_'+qstr+'/'
+for q_in in q_ins:
+    q_instr = str(q_in)
+    dirname = './q_in_'+q_instr+'/'
     idirs.append(dirname)
     # Root process makes the directory if it doesn't already exist
     if rank==0:
