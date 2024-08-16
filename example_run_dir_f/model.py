@@ -1128,11 +1128,11 @@ class set_f(ez):
         """
         Takes the current bed, performs an x-average (accounting for mean slope), and solves the 1D BVP:
 
-        nu_t dy(dy(u)) = - g slope_x depth + (1 + dy(depth)^2) alpha(e) u^2
+        nu_t dy(dy(U)) = - g slope_x D + (1 + dy(depth)^2) alpha(e) (U/D)^2
 
-        where u is the depth-averaged flow, nu_t is the turbulent viscosity, and alpha is the 'closure' relating the entrainment field (averaged in x) to a friction. 
+        where U is the depth-integrated flow, D is the flow depth, nu_t is the turbulent viscosity, and alpha is the 'closure' relating the entrainment field (averaged in x) to a friction. 
 
-        returns u
+        returns u = U/D, the depth-averaged slope.
         """        
         u_out = np.zeros(self.z.shape,dtype=float)
 
@@ -1180,7 +1180,7 @@ class set_f(ez):
                     return np.array([ua[0],ub[0]])
                 u_0 = np.zeros((2,ys.size))
 
-                u = solve_bvp(fun,bc,ys,u_0)
+                u = solve_bvp(fun,bc,ys,u_0) # This is the depth-integrated flow. Next we need to divide by D.
 
                 # u_out[mask_index+il:mask_index + il + len(D),:] = np.tile(u.sol(ys)[0],(self.Nx,1)).T
                 u_out[mask_index+il:mask_index + il + len(D),:] = np.tile(u.sol(ys)[0]/D_convolved,(self.Nx,1)).T
