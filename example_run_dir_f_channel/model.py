@@ -20,7 +20,7 @@ class ez():
         ----------
         Nx: number of gridpoints in x-direction. One gridpoint represents a grain diameter. 
         Ny: number of gridpoints in y-direction. One gridpoint represents a grain diameter. 
-        c_0: prefactor to the probability of entrainment givdddden an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). Typical values to use depend on what mode you are using (see set_f or set_q).
+        c_0: prefactor to the probability of entrainment given an active neighbor. Represents the kinetic energy of impact of a grain divided by the potential energy necessary to take one grain and move it one grain diameter up (with a flat bed). Typical values to use depend on what mode you are using (see set_f or set_q).
         
         Optional parameters:
         skipmax: (average) hop length in units of grain diameters. Hop lengths are binomially distributed with a mean of skipmax. (See dx_calc function). Set to 3 by default
