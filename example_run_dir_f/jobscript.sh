@@ -9,13 +9,16 @@
 
 # Job
 ##SBATCH --partition=sched_mit_hill
-#SBATCH --partition=newnodes
+#SBATCH --partition=newnodes,sched_mit_hill
 ##SBATCH --partition=sched_any_quicktest
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=16
+##SBATCH --nodes=1
+##SBATCH --ntasks-per-node=7
+#SBATCH --ntasks=39
+##SBATCH --exclude=node[390-391]
+#SBATCH --constraint=centos7
 #SBATCH --time=12:00:00 ## Extra 5 mins to do last saves
 ##SBATCH --time=00:15:00 ## Extra 5 mins to do last saves
-#SBATCH -J ez_128x128_f  # sensible name for the job
+#SBATCH -J ez_512x512_no_f  # sensible name for the job
 
 # Setup conda and dedalus environment
 minicondahome="/home/santiago_b/miniconda3"
@@ -24,4 +27,4 @@ minicondahome="/home/santiago_b/miniconda3"
 conda activate ez
 
 # Run scripts
-mpiexec -n 16 python3 main_f_parallel.py
+mpiexec -n 39 python3 main_f_parallel.py

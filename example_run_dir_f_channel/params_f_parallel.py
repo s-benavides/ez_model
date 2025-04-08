@@ -51,7 +51,7 @@ bed_h = 50
 slope = 1.0e-3
 
 # Main input parameter: number of grains dropped at one end of the domain per time step.
-udesired = np.linspace(90.,120.,16)
+udesired = np.linspace(100.,130.,16)
 a_0s = udesired**(-2) * (D_0/10)
 if len(a_0s)!=size:
     print("ERROR: number of parameters must match the number of cores!")
@@ -75,7 +75,7 @@ NSc = 10 # Choose number of bins to average the scalar data over every hour of w
 
 # Are we continuing from a previous run?
 overwrite = bool(0) # 1 if starting a new run, 0 if continuing from previous save. 
-today = '2022-06-12'
+today = '2022-09-02'
 
 # Input directory
 idirs = []
