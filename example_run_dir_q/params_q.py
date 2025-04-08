@@ -4,11 +4,6 @@ Parameter file for ez_model.
 import sys
 import numpy as np
 import os
-from mpi4py import MPI
-
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-size = comm.Get_size()
 
 # Set parameters
 # Size of domain
@@ -43,10 +38,7 @@ fb = 0.3
 slope = 0.0
 
 # Main input parameter: number of grains dropped at one end of the domain per time step.
-q_ins = np.arange(10,110,10)[1:]
-##q_ins = np.array([200,300,500,750])
-if len(q_ins)!=size:
-    print("ERROR: number of parameters must match the number of cores!")
+q_in = 50
 
 # Choose number of hours to run (real time) 
 H = 11.8
@@ -60,23 +52,16 @@ NS = 2
 NSc = np.nan
 
 # Are we continuing from a previous run?
-overwrite = bool(0) # 1 if starting a new run, 0 if continuing from previous save. 
-today = '2022-10-30'
+overwrite = bool(1) # 1 if starting a new run, 0 if continuing from previous save. 
+today = '2025-04-08'
 
 # Input directory
-idirs = []
-for q_in in q_ins:
-    q_instr = str(q_in)
-    dirname = './q_in_'+q_instr+'/'
-    idirs.append(dirname)
-    # Root process makes the directory if it doesn't already exist
-    if rank==0:
-        if not os.path.exists(dirname):
-            os.makedirs(dirname)
-
-# Synchronizes parallel operations
-comm.Barrier()
+q_instr = str(q_in)
+idir = './q_in_'+q_instr+'/'
+# Makes the directory if it doesn't already exist
+if not os.path.exists(idir):
+    os.makedirs(idir)
 
 # Output directory
-odirs = idirs
+odir = idir
 

@@ -5,20 +5,11 @@ import pathlib
 import numpy as np
 import h5py
 import time
-from mpi4py import MPI
 from scipy.stats import binned_statistic
 
 from os import path
 
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-
 from params_q_parallel import *
-
-# Process decides which directories and parameter values to work on:
-q_in = q_ins[rank]
-odir = odirs[rank]
-idir = idirs[rank]
 
 # Printing to file:
 if overwrite:
@@ -27,7 +18,7 @@ else:
     log = open(odir+'log.txt','a')
 sys.stdout = log
 
-print(str({'Nx':Nx, 'Ny':Ny,'zfactor':zfactor, 'c_0':c_0,'f':f,'q_in':q_in,'skipmax':skipmax, 'slope':slope,'mask_index':mask_index,'fb':fb,'H':H,'NS':NS,'NSc':NSc,'overwrite':overwrite,'idir':idir,'odir':odir,'rank':rank}),flush=True)
+print(str({'Nx':Nx, 'Ny':Ny,'zfactor':zfactor, 'c_0':c_0,'f':f,'q_in':q_in,'skipmax':skipmax, 'slope':slope,'mask_index':mask_index,'fb':fb,'H':H,'NS':NS,'NSc':NSc,'overwrite':overwrite,'idir':idir,'odir':odir}),flush=True)
 
 # Initialize
 
