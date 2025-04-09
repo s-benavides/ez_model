@@ -15,8 +15,10 @@ Once initialized, you have access to the two primary fields, the entrainment fie
 
 Advancing to the next time step is as simple as executing `run.step()`.
 
+A simple test run can be found in the `postproc` directory, in both a Jupyter notebook as well as a python script.
 
 ### Example directories included
 To run the model, I've included two example run directories. One is to be used on a single CPU and the other launches many runs (with different parameter values) in parallel using MPI4Py.
 
-### Postproc directory and jupyter notebook run example
+### Postproc directory
+Apart from the simple run example, the `postproc` directory includes scripts for analyzing the results of the example run directories (again, in both Jupyter notebook and python script forms).
