@@ -48,7 +48,7 @@ if len(q_ins)!=size:
     print("ERROR: number of parameters must match the number of cores!")
 
 # Choose number of hours to run (real time) 
-H = 11.8
+H = 0.25 #11.8
 
 # Choose number of state and profile saves per run (one always saves at the end of the run)
 NS = 2

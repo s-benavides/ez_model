@@ -9,7 +9,7 @@ from scipy.stats import binned_statistic
 
 from os import path
 
-from params_q_parallel import *
+from params_q import *
 
 # Printing to file:
 if overwrite:

@@ -7,8 +7,8 @@ import os
 
 # Set parameters
 # Size of domain
-Nx = 200
-Ny = 1000
+Nx = 100
+Ny = 20
 
 # Average lattice sites hopped over by grain in motion
 skipmax = 3
@@ -38,10 +38,10 @@ fb = 0.3
 slope = 0.0
 
 # Main input parameter: number of grains dropped at one end of the domain per time step.
-q_in = 50
+q_in = 5
 
 # Choose number of hours to run (real time) 
-H = 11.8
+H = 0.25 #11.8
 
 # Choose number of state and profile saves per run (one always saves at the end of the run)
 NS = 2
