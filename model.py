@@ -780,7 +780,7 @@ class set_q(ez):
             print("ERROR: check q_in value.")
             
         if bal:        
-            temp = np.sum(self.e)+np.int(np.round(np.sum(self.z)*self.zfactor))+self.q_tot_out
+            temp = np.sum(self.e)+np.int32(np.round(np.sum(self.z)*self.zfactor))+self.q_tot_out
         
         ## Recalculates dx randomly
         self.dx_mat = self.dx_calc()
