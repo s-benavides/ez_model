@@ -22,3 +22,6 @@ To run the model, I've included two example run directories. One is to be used o
 
 ### Postproc directory
 Apart from the simple run example, the `postproc` directory includes scripts for analyzing the results of the example run directories (again, in both Jupyter notebook and python script forms).
+
+### Releases:
+v1.0, April 10, 2025. [![DOI](https://zenodo.org/badge/218145858.svg)](https://doi.org/10.5281/zenodo.15182885)
